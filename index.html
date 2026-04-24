@@ -1674,7 +1674,9 @@ function renderFunds(){
     const lpc = lockedProfit !== null ? (lockedProfit > 0 ? 'up' : lockedProfit < 0 ? 'down' : '') : '';
     const lrc = lockedRate !== null ? (lockedRate > 0 ? 'up' : lockedRate < 0 ? 'down' : '') : '';
 
-    sumInvest += lockedMarketVal; sumPToday += todayP; if (lockedProfit !== null) sumPTotal += lockedProfit;
+    // 统计栏：始终用完整收益（含当日收益），不管盘中盘后
+    const fullMarketVal = (fund.amount || 0) + dProfit;
+    sumInvest += fullMarketVal; sumPToday += todayP; if (dProfit !== null) sumPTotal += dProfit;
 
     const isExp = (expandedCode === fund.code);
     const rowClass = isUp ? 'up' : isDown ? 'down' : '';
@@ -1817,13 +1819,11 @@ function renderFunds(){
   let allInvest=0,allCost=0,allPToday=0,allPTotal=0;
   const allGroupFunds = funds.filter(f=>!f.group||f.group===groups[0]);
   allGroupFunds.forEach(f=>{
-    const hour = new Date().getHours();
-    const lockedP = hour < MARKET_CLOSE_HOUR
-      ? ((f.totalProfit !== null && f.totalProfit !== undefined) ? f.totalProfit : 0)
-      : calcDisplayProfit(f);
-    const lockedMV = (f.amount || 0) + lockedP;
+    // 统计栏：始终用完整收益（含当日收益），不管盘中盘后
+    const dProfit = calcDisplayProfit(f);
+    const fullMV = (f.amount || 0) + dProfit;
     const todayP = calcTodayProfit(f);
-    allInvest += lockedMV; allCost += (f.amount || 0); allPToday += todayP; if (lockedP !== null) allPTotal += lockedP;
+    allInvest += fullMV; allCost += (f.amount || 0); allPToday += todayP; if (dProfit !== null) allPTotal += dProfit;
   });
   const ar=allCost>0?allPTotal/allCost*100:0;
   const isAllView = activeGroup === groups[0];
