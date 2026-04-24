@@ -1090,7 +1090,7 @@ function addAmount(code, el){
   const f=funds.find(x=>x.code===code); if(!f)return;
   f.amount+=v;
   if(f._origMarketVal !== null && f._origMarketVal !== undefined){ f._origMarketVal += v; }
-  const nav = parseFloat(f._prevDwjz) || parseFloat(f.dwjz) || 0;
+  const nav = parseFloat(f.dwjz) || parseFloat(f._prevDwjz) || 0;
   if(nav > 0) f.shares=(f.shares||0)+v/nav;
   saveFunds(); renderFunds(); el.value='';
   showToast(`加仓成功，当前 ${formatMoney(f.amount)}`,'success');
@@ -1290,7 +1290,7 @@ function calcShares(f){
   const marketVal = (f._origMarketVal !== null && f._origMarketVal !== undefined) 
     ? f._origMarketVal 
     : (f.totalProfit !== null && f.totalProfit !== undefined ? f.amount + f.totalProfit : f.amount);
-  const nav = parseFloat(f._prevDwjz) || parseFloat(f.dwjz) || 0;
+  const nav = parseFloat(f.dwjz) || parseFloat(f._prevDwjz) || 0;
   if(!f.amount || nav <= 0 || marketVal <= 0) return;
   const correctShares = marketVal / nav;
   if(!f.shares || f.shares <= 0 || Math.abs(f.shares - correctShares) / correctShares > 0.01){
