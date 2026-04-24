@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- v24.5-FundBase 2026-04-24 只用FundBase接口（Valuation字段获取实时估值，统一_prevDwjz=Valuation.dwjz） -->
+<!-- v24.6-FundBase 2026-04-25 1.盘中判断改为净值差自动检测 2.calcShares用_prevDwjz算份额 -->
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
@@ -638,7 +638,7 @@
 <div class="header">
   <h1>📊 基金持仓监控</h1>
   <div class="update-time" id="updateTime">等待刷新...</div>
-  <span class="version-tag">v24.5-FundBase</span>
+  <span class="version-tag">v24.6-FundBase</span>
   <button class="theme-toggle" id="themeToggle" onclick="toggleTheme()">🌙</button>
 </div>
 
@@ -1090,7 +1090,7 @@ function addAmount(code, el){
   const f=funds.find(x=>x.code===code); if(!f)return;
   f.amount+=v;
   if(f._origMarketVal !== null && f._origMarketVal !== undefined){ f._origMarketVal += v; }
-  const nav = parseFloat(f.dwjz) || parseFloat(f._prevDwjz) || 0;
+  const nav = parseFloat(f._prevDwjz) || parseFloat(f.dwjz) || 0;
   if(nav > 0) f.shares=(f.shares||0)+v/nav;
   saveFunds(); renderFunds(); el.value='';
   showToast(`加仓成功，当前 ${formatMoney(f.amount)}`,'success');
@@ -1290,7 +1290,7 @@ function calcShares(f){
   const marketVal = (f._origMarketVal !== null && f._origMarketVal !== undefined) 
     ? f._origMarketVal 
     : (f.totalProfit !== null && f.totalProfit !== undefined ? f.amount + f.totalProfit : f.amount);
-  const nav = parseFloat(f.dwjz) || parseFloat(f._prevDwjz) || 0;
+  const nav = parseFloat(f._prevDwjz) || parseFloat(f.dwjz) || 0;
   if(!f.amount || nav <= 0 || marketVal <= 0) return;
   const correctShares = marketVal / nav;
   if(!f.shares || f.shares <= 0 || Math.abs(f.shares - correctShares) / correctShares > 0.01){
@@ -1650,10 +1650,11 @@ function renderFunds(){
     const amt=fund.amount||0,name=fund.name||('基金'+fund.code);
     const isUp=gszzl>0,isDown=gszzl<0,cc=isUp?'up':isDown?'down':'';
 
-    // ====== 盘中锁死逻辑（v22.2）======
-    // 盘中（<15:00）：持有金额/收益锁死不跳动，当日收益仍然跳动
-    const hour = new Date().getHours();
-    const isMarketOpen = hour < MARKET_CLOSE_HOUR;
+    // ====== 盘中锁死逻辑（v24.6）======
+    // 用净值差自动判断：DWJZ（当日净值）与_prevDwjz（昨日净值）相同 → 盘中
+    // DWJZ ≠ _prevDwjz → 盘后已确认
+    const prevDwjz = parseFloat(fund._prevDwjz) || 0;
+    const isMarketOpen = prevDwjz <= 0 || Math.abs(dwjz - prevDwjz) < 0.0001;
 
     // 锁死的持有收益（盘中不跳动）
     const lockedProfit = isMarketOpen ? ((fund.totalProfit !== null && fund.totalProfit !== undefined) ? fund.totalProfit : 0) : calcDisplayProfit(fund);
