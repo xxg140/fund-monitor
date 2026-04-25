@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- v24.6-FundBase 2026-04-25 1.盘中判断改为净值差自动检测 2.calcShares用_prevDwjz算份额 -->
+<!-- v24.10-FundBase 2026-04-25 1._origMarketVal不再被累加修改 2.calcDisplayProfit自带盘中盘后判断 3.删除renderFunds盘中锁死逻辑 -->
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
@@ -216,7 +216,7 @@
   }
   .fund-row:hover {
     box-shadow: 0 8px 24px rgba(0,0,0,0.08), 0 2px 8px rgba(0,0,0,0.04);
-    transform: translateY(-1px); border-color: #e2e8f0;
+    border-color: #cbd5e1;
   }
   .fund-row.expanded {
     box-shadow: 0 12px 32px rgba(0,0,0,0.1), 0 4px 12px rgba(0,0,0,0.06);
@@ -638,7 +638,7 @@
 <div class="header">
   <h1>📊 基金持仓监控</h1>
   <div class="update-time" id="updateTime">等待刷新...</div>
-  <span class="version-tag">v24.6-FundBase</span>
+  <span class="version-tag">v24.10-FundBase</span>
   <button class="theme-toggle" id="themeToggle" onclick="toggleTheme()">🌙</button>
 </div>
 
@@ -1090,7 +1090,7 @@ function addAmount(code, el){
   const f=funds.find(x=>x.code===code); if(!f)return;
   f.amount+=v;
   if(f._origMarketVal !== null && f._origMarketVal !== undefined){ f._origMarketVal += v; }
-  const nav = parseFloat(f.dwjz) || parseFloat(f._prevDwjz) || 0;
+  const nav = parseFloat(f._prevDwjz) || parseFloat(f.dwjz) || 0;
   if(nav > 0) f.shares=(f.shares||0)+v/nav;
   saveFunds(); renderFunds(); el.value='';
   showToast(`加仓成功，当前 ${formatMoney(f.amount)}`,'success');
@@ -1110,22 +1110,30 @@ function minusAmount(code,el){
 function modifyAmount(code, el){
   const v=parseFloat(el.value); if(isNaN(v)||v<0){showToast('无效金额','error');return;}
   const f=funds.find(x=>x.code===code); if(!f)return;
-  f.amount=v;
-  if(f.totalProfit !== null && f.totalProfit !== undefined){ f._origMarketVal = v + f.totalProfit; }
-  else if(f._origMarketVal !== null && f._origMarketVal !== undefined){ f._origMarketVal = v; }
-  if(!(f.shares && f.shares>0)){
-    const dwjz=parseFloat(f.dwjz)||0;
-    const marketVal = (f._origMarketVal !== null && f._origMarketVal !== undefined) ? f._origMarketVal : (f.totalProfit !== null && f.totalProfit !== undefined ? v + f.totalProfit : v);
-    if(dwjz>0 && marketVal>0) f.shares = marketVal / dwjz;
+  // v24.10：用户输入的是持有金额（市值），系统算本金
+  const newMarketVal = v;
+  f._origMarketVal = newMarketVal;
+  if(f.totalProfit !== null && f.totalProfit !== undefined){ 
+    f.amount = newMarketVal - f.totalProfit;  // 本金 = 市值 - 持有收益
+  } else {
+    f.amount = newMarketVal;
   }
+  // 重新计算份额 = 新市值 / 当前净值基准
+  const nav = parseFloat(f._prevDwjz) || parseFloat(f.dwjz) || 0;
+  if(nav > 0 && newMarketVal > 0) f.shares = newMarketVal / nav;
+  // 清除累加标记，允许重新累加
+  f._lastAccumJzrq = null;
   saveFunds(); renderFunds(); el.value='';
-  showToast(`金额已修改为 ${formatMoney(v)}`,'success');
+  showToast(`持有金额已修改为 ${formatMoney(v)}`,'success');
 }
 function modifyProfit(code, el){
   const v=parseFloat(el.value); if(isNaN(v)){showToast('请输入数值','error');return;}
   const f=funds.find(x=>x.code===code); if(!f)return;
   f.totalProfit=v;
-  f._origMarketVal = (f.amount || 0) + v;
+  // v24.10：市值不变，本金 = 市值 - 新收益
+  const marketVal = (f._origMarketVal !== null && f._origMarketVal !== undefined) ? f._origMarketVal : (f.amount || 0);
+  f.amount = marketVal - v;
+  f._origMarketVal = marketVal;  // 保持市值不变
   f.calibrateTime=parseFloat(f.gsz)||parseFloat(f.dwjz)||null;
   // 修改收益后清除累加标记，允许重新累加
   f._lastAccumJzrq = null;
@@ -1185,6 +1193,8 @@ function fetchFundBaseFirst(code, doResolve){
       if(valData && valData.dwjz && parseFloat(valData.dwjz)>0){
         f._valuationDwjz=String(valData.dwjz);
       }
+      // 保存Valuation.jzrq，用于非QDII盘中/盘后判断
+      if(valData && valData.jzrq){ f._valJzrq=valData.jzrq; }
       const latestNav=d.DWJZ; const latestDate=d.FSRQ; const latestChange=d.RZDF;
       const fundType=d.FUNDTYPE||'';
       f._fundType=fundType;
@@ -1232,7 +1242,7 @@ function fetchFundBaseFirst(code, doResolve){
 // 累加后：持有收益基准更新，_prevDwjz 更新为当前 dwjz，标记 _lastAccumJzrq
 function tryAutoAccumulate(fund) {
   if (!fund) return;
-  const isQDII = fund.isQDII === true;
+  const isQDII = fund.name && fund.name.includes('QDII');
   const jzrq = fund.jzrq || '';
   const dwjz = parseFloat(fund.dwjz) || 0;
   const prevDwjz = parseFloat(fund._prevDwjz) || 0;
@@ -1259,7 +1269,7 @@ function tryAutoAccumulate(fund) {
     // 首次获取且确认收益非零：执行累加
     const baseProfit = (fund.totalProfit !== null && fund.totalProfit !== undefined) ? fund.totalProfit : 0;
     fund.totalProfit = baseProfit + confirmProfit;
-    fund._origMarketVal = (fund.amount || 0) + fund.totalProfit;
+    // v24.9: _origMarketVal 不再更新，保持导入时的原始市值
     fund._prevDwjz = String(dwjz);
     fund._lastAccumJzrq = jzrq;
     console.log(`[首次累加] ${fund.code}: 确认收益+${confirmProfit.toFixed(2)}, 新totalProfit=${fund.totalProfit.toFixed(2)}`);
@@ -1278,7 +1288,7 @@ function tryAutoAccumulate(fund) {
   // 累加确认收益
   const baseProfit = (fund.totalProfit !== null && fund.totalProfit !== undefined) ? fund.totalProfit : 0;
   fund.totalProfit = baseProfit + confirmProfit;
-  fund._origMarketVal = (fund.amount || 0) + fund.totalProfit;
+  // v24.9: _origMarketVal 不再更新，保持导入时的原始市值
   fund._prevDwjz = String(dwjz);
   fund._lastAccumJzrq = jzrq;
   console.log(`[累加基准] ${fund.code}: 确认收益+${confirmProfit.toFixed(2)}, 新totalProfit=${fund.totalProfit.toFixed(2)}`);
@@ -1290,7 +1300,7 @@ function calcShares(f){
   const marketVal = (f._origMarketVal !== null && f._origMarketVal !== undefined) 
     ? f._origMarketVal 
     : (f.totalProfit !== null && f.totalProfit !== undefined ? f.amount + f.totalProfit : f.amount);
-  const nav = parseFloat(f.dwjz) || parseFloat(f._prevDwjz) || 0;
+  const nav = parseFloat(f._prevDwjz) || parseFloat(f.dwjz) || 0;
   if(!f.amount || nav <= 0 || marketVal <= 0) return;
   const correctShares = marketVal / nav;
   if(!f.shares || f.shares <= 0 || Math.abs(f.shares - correctShares) / correctShares > 0.01){
@@ -1532,28 +1542,85 @@ function getOrigMarketValue(fund) {
   if (fund.totalProfit !== null && fund.totalProfit !== undefined) return (fund.amount || 0) + fund.totalProfit;
   return fund.amount || 0;
 }
-// 计算当日收益（官方公式：份额 × 净值差）
-// v24.2 统一逻辑：当日收益 = 份额 × (DWJZ - Valuation.dwjz)
+// 计算当日收益（v24.7）
+// 盘中：gsz - DWJZ（跟着估值跳动）
+// 盘后：dwjz - prevDwjz（确认净值差）
+// v24.9：去掉_lastAccumJzrq保护（移到calcDisplayProfit），当日收益始终显示
 function calcTodayProfit(fund) {
   const shares = ensureShares(fund);
   const dwjz = parseFloat(fund.dwjz) || 0;
   const prevDwjz = parseFloat(fund._prevDwjz) || 0;
+  const gsz = parseFloat(fund.gsz) || 0;
   const gszzl = parseFloat(fund.gszzl) || 0;
-  // 有份额 + 有昨日净值
-  if (shares > 0 && prevDwjz > 0) {
-    return shares * (dwjz - prevDwjz);
+  const fsrq = fund.jzrq || '';
+  const valJzrq = fund._valJzrq || '';
+  const isQDII = fund.name && fund.name.includes('QDII');
+
+  // 盘后判断
+  let isAfterClose = false;
+  if (isQDII) {
+    const now = new Date();
+    const todayStr = now.toISOString().slice(0, 10);
+    const yesterday = new Date(now); yesterday.setDate(yesterday.getDate() - 1);
+    const yesterdayStr = yesterday.toISOString().slice(0, 10);
+    isAfterClose = yesterdayStr === fsrq;
+  } else {
+    // 非QDII：fsrq > Valuation.jzrq → 盘后
+    isAfterClose = fsrq > valJzrq;
   }
-  // 有份额但无昨日净值，用涨跌幅反推
-  if (shares > 0 && dwjz > 0 && Math.abs(gszzl) > NAV_EPSILON) {
-    const prevNav = dwjz / (1 + gszzl / 100);
-    return shares * prevNav * gszzl / 100;
+
+  if (shares > 0) {
+    if (isAfterClose && prevDwjz > 0) {
+      // 盘后：确认净值差
+      return shares * (dwjz - prevDwjz);
+    }
+    // 盘中：估算净值差（gsz跟着估值跳动）
+    if (gsz > 0 && dwjz > 0) {
+      return shares * (gsz - dwjz);
+    }
+    // fallback：用涨跌幅反推
+    if (dwjz > 0 && Math.abs(gszzl) > NAV_EPSILON) {
+      const prevNav = dwjz / (1 + gszzl / 100);
+      return shares * prevNav * gszzl / 100;
+    }
   }
+
   // 无份额，用市值×涨跌幅估算
   return getOrigMarketValue(fund) * gszzl / 100;
 }
-// 持有收益（基准 + 当日跳动）
+// 持有收益（v24.9）
+// 盘中：只显示 totalProfit（不加当日估算收益）
+// 盘后：totalProfit + 当日确认收益（未累加时）
+// 已累加：直接返回 totalProfit（已包含当日收益）
 function calcDisplayProfit(fund) {
   const base = (fund.totalProfit !== null && fund.totalProfit !== undefined) ? fund.totalProfit : 0;
+  const fsrq = fund.jzrq || '';
+  const valJzrq = fund._valJzrq || '';
+  const isQDII = fund.name && fund.name.includes('QDII');
+
+  // 已累加过 → totalProfit 已包含当日收益
+  if (fund._lastAccumJzrq && fund._lastAccumJzrq === fsrq) {
+    return base;
+  }
+
+  // 盘后判断（和 calcTodayProfit 一致）
+  let isAfterClose = false;
+  if (isQDII) {
+    const now = new Date();
+    const todayStr = now.toISOString().slice(0, 10);
+    const yesterday = new Date(now); yesterday.setDate(yesterday.getDate() - 1);
+    const yesterdayStr = yesterday.toISOString().slice(0, 10);
+    isAfterClose = yesterdayStr === fsrq;
+  } else {
+    isAfterClose = fsrq > valJzrq;
+  }
+
+  // 盘中：不加当日收益
+  if (!isAfterClose) {
+    return base;
+  }
+
+  // 盘后且未累加：加当日确认收益
   return base + calcTodayProfit(fund);
 }
 // 持有金额（本金 + 持有收益）
@@ -1650,52 +1717,38 @@ function renderFunds(){
     const amt=fund.amount||0,name=fund.name||('基金'+fund.code);
     const isUp=gszzl>0,isDown=gszzl<0,cc=isUp?'up':isDown?'down':'';
 
-    // ====== 盘中锁死逻辑（v24.6）======
-    // 用净值差自动判断：DWJZ（当日净值）与_prevDwjz（昨日净值）相同 → 盘中
-    // DWJZ ≠ _prevDwjz → 盘后已确认
-    const prevDwjz = parseFloat(fund._prevDwjz) || 0;
-    const isMarketOpen = prevDwjz <= 0 || Math.abs(dwjz - prevDwjz) < 0.0001;
-
-    // 锁死的持有收益（盘中不跳动）
-    const lockedProfit = isMarketOpen ? ((fund.totalProfit !== null && fund.totalProfit !== undefined) ? fund.totalProfit : 0) : calcDisplayProfit(fund);
-    // 锁死的持有金额（盘中不跳动）
-    const lockedMarketVal = (fund.amount || 0) + lockedProfit;
-    // 锁死的收益率
-    const lockedRate = calcDisplayRate(lockedProfit, amt);
-
-    // 跳动的当日收益（始终实时）
-    const todayP = calcTodayProfit(fund);
-    // 用于汇总统计的完整收益（含跳动）
+    // 持有收益/金额/收益率（v24.9：calcDisplayProfit自带盘中盘后判断）
     const dProfit = calcDisplayProfit(fund);
     const dRate = calcDisplayRate(dProfit, amt);
+    const dMarketVal = (fund.amount || 0) + dProfit;
 
-    const pc = dProfit !== null ? (dProfit > 0 ? 'up' : dProfit < 0 ? 'down' : '') : '';
-    const rc = dRate !== null ? (dRate > 0 ? 'up' : dRate < 0 ? 'down' : '') : '';
-    const lpc = lockedProfit !== null ? (lockedProfit > 0 ? 'up' : lockedProfit < 0 ? 'down' : '') : '';
-    const lrc = lockedRate !== null ? (lockedRate > 0 ? 'up' : lockedRate < 0 ? 'down' : '') : '';
+    // 当日收益（始终实时）
+    const todayP = calcTodayProfit(fund);
 
-    // 统计栏：始终用完整收益（含当日收益），不管盘中盘后
-    const fullMarketVal = (fund.amount || 0) + dProfit;
-    sumInvest += fullMarketVal; sumPToday += todayP; if (dProfit !== null) sumPTotal += dProfit;
+    const dc = dProfit !== null ? (dProfit > 0 ? 'up' : dProfit < 0 ? 'down' : '') : '';
+    const drc = dRate !== null ? (dRate > 0 ? 'up' : dRate < 0 ? 'down' : '') : '';
+
+    // 统计栏
+    sumInvest += dMarketVal; sumPToday += todayP; if (dProfit !== null) sumPTotal += dProfit;
 
     const isExp = (expandedCode === fund.code);
     const rowClass = isUp ? 'up' : isDown ? 'down' : '';
 
-    // ====== "已更新"标签逻辑 ======
-    // FUNDTYPE 001-006：fsrq === UTC今天 → 显示已更新
-    // FUNDTYPE 007：fsrq === UTC昨天 → 显示已更新
-    const now = new Date();
-    const todayStr = now.toISOString().slice(0, 10);
-    const yesterday = new Date(now); yesterday.setDate(yesterday.getDate() - 1);
-    const yesterdayStr = yesterday.toISOString().slice(0, 10);
+    // ====== "已更新"标签逻辑（v24.10）======
+    // 非QDII：当前日期 == fsrq → 显示已更新
+    // QDII：  当前日期-1 == fsrq → 显示已更新
     const fsrq = fund.jzrq || '';
-    const fundType = fund._fundType || '';
+    const now2 = new Date();
+    const todayStr2 = now2.toISOString().slice(0, 10);
+    const yesterday2 = new Date(now2); yesterday2.setDate(yesterday2.getDate() - 1);
+    const yesterdayStr2 = yesterday2.toISOString().slice(0, 10);
+    const isQDII2 = fund.name && fund.name.includes('QDII');
 
     let isUpdated = false;
-    if (fundType === '007') {
-      isUpdated = fsrq === yesterdayStr;  // T+2：fsrq=UTC昨天 → 显示
-    } else if (fundType >= '001' && fundType <= '006') {
-      isUpdated = fsrq === todayStr;      // T+1：fsrq=UTC今天 → 显示
+    if (isQDII2) {
+      isUpdated = fsrq === yesterdayStr2;  // QDII：fsrq=昨天 → 显示
+    } else {
+      isUpdated = fsrq === todayStr2;      // 非QDII：fsrq=今天 → 显示
     }
     const jzrqShort = fsrq ? fsrq.slice(5).replace('-', '/') : '';
     const updatedTag = isUpdated ? `<span class="updated-tag">已更新${jzrqShort}</span>` : '';
@@ -1709,7 +1762,7 @@ function renderFunds(){
           <div class="fm-fundname" title="${name}">${displayName}</div>
           <div style="display:flex;align-items:center;gap:6px;margin-top:2px;flex-wrap:wrap;">
             ${updatedTag}
-            <div class="fm-amount-val">${formatMoney(lockedMarketVal)}</div>
+            <div class="fm-amount-val">${formatMoney(dMarketVal)}</div>
           </div>
         </div>`;
       } else if (col.field === 'amount') {
@@ -1733,9 +1786,9 @@ function renderFunds(){
       } else if (col.field === 'profit') {
         // 盘中显示锁死的持有收益（不跳动）
         colsHtml += `<div class="fm-total">
-          ${lockedProfit!==null
-            ? `<div class="fm-total-val ${lpc}">${lockedProfit>=0?'+':'-'}${formatMoney(Math.abs(lockedProfit))}</div>
-               <div class="fm-total-rate ${lrc}">${lockedRate>=0?'+':''}${lockedRate.toFixed(2)}%</div>`
+          ${dProfit!==null
+            ? `<div class="fm-total-val ${dc}">${dProfit>=0?'+':'-'}${formatMoney(Math.abs(dProfit))}</div>
+               <div class="fm-total-rate ${drc}">${dRate>=0?'+':''}${dRate.toFixed(2)}%</div>`
             : `<div class="fm-total-val pending">未校准</div>
                <div class="fm-total-rate pending">--</div>`}
         </div>`;
@@ -1771,9 +1824,9 @@ function renderFunds(){
                 </div>
               </div>
               <div class="action-btns">
-                <button class="btn-action" onclick="toggleActionPanel('${fund.code}','group',this)">所属分组</button>
-                <button class="btn-action" onclick="toggleActionPanel('${fund.code}','amount',this)">修改本金</button>
-                <button class="btn-action" onclick="toggleActionPanel('${fund.code}','profit',this)">修改收益</button>
+                <button class="btn-action" onclick="toggleActionPanel('${fund.code}','group',this)">修改分组</button>
+                <button class="btn-action" onclick="toggleActionPanel('${fund.code}','amount',this)">修改持有金额</button>
+                <button class="btn-action" onclick="toggleActionPanel('${fund.code}','profit',this)">修改持有收益</button>
                 <button class="btn-action" onclick="toggleActionPanel('${fund.code}','trade',this)">加减仓</button>
               </div>
               <div class="action-panel" id="apGroup_${fund.code}" style="display:none;">
