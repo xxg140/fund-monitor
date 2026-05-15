@@ -175,10 +175,10 @@
   .group-tab {
     padding: 6px 14px; border-radius: 10px; font-size: 12px; font-weight: 500;
     cursor: pointer; white-space: nowrap; transition: all 0.15s;
-    border: 1px solid var(--border-default); background: var(--bg-surface-3); color: var(--text-muted);
+    border: 1px solid var(--border-default); background: var(--bg-surface-3); color: var(--text-secondary);
     display: flex; align-items: center; box-sizing: border-box;
   }
-  .group-tab:hover { border-color: var(--border-hover); color: var(--text-secondary); }
+
   .group-tab.active {
     background: linear-gradient(135deg, var(--accent) 0%, var(--accent-dark) 100%);
     color: white; border-color: transparent;
@@ -211,7 +211,7 @@
     color: white; box-shadow: 0 1px 3px rgba(59,130,246,0.3);
   }
   .btn-primary:hover { background: linear-gradient(135deg, var(--accent-dark) 0%, var(--accent-hover) 100%); transform: translateY(-1px); }
-  .btn-secondary { background: var(--bg-surface-3); color: var(--text-muted); border: 1px solid var(--border-default); }
+  .btn-secondary { background: var(--bg-surface-3); color: var(--text-secondary); border: 1px solid var(--border-default); }
   .btn-secondary:active { transform: scale(0.97); }
   .btn-success { background: var(--color-down); color: white; }
   .btn-success:hover { background: var(--color-down-hover); transform: translateY(-1px); }
@@ -571,7 +571,7 @@
   body.dark #indexChartInfo #icDate { color: #ffffff !important; }
   body.dark #indexDetailBody div[style*="color:var(--text-primary)"] { color: #e2e8f0 !important; }
   #indexChartInfo div { color: var(--text-secondary); }
-  #indexDetailCanvas { transition: opacity 0.15s ease; }
+  #indexDetailCanvas { transition: opacity 0.5s ease; }
   #icDate { color: var(--text-secondary); }
   body.dark .chart-tooltip {
     background: var(--bg-surface-3);
@@ -899,7 +899,7 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
 <script>
-const APP_VERSION = 'V2';
+const APP_VERSION = 'V3';
 const PERIOD_NAMES = { trend: '分时', trend5: '五日', day: '日K', week: '周K', month: '月K' };
 const XHR_TIMEOUT = 8000;
 const JSONP_TIMEOUT = 10000;
@@ -2466,14 +2466,14 @@ function createTrendChart(canvas, data, period, costNav) {
           pointRadius: 0,
           pointHoverRadius: 0,
           borderWidth: 1.5,
-          tension: 0,
+          tension: 0.2,
         },
       ],
     },
     options: {
       responsive: true,
       maintainAspectRatio: false,
-      animation: false,
+      animation: { duration: 800, easing: 'easeOutQuart' },
       interaction: { mode: 'index', intersect: false },
       layout: { padding: { left: 10, right: 10 } },
       plugins: { legend: { display: false }, tooltip: { enabled: false } },
@@ -2553,6 +2553,77 @@ function createTrendChart(canvas, data, period, costNav) {
 
   chart.resize();
   chart.draw();
+  return chart;
+}
+
+// 更新已有趋势图数据（带动画过渡）
+function updateTrendChart(canvas, data, period, costNav) {
+  const chart = Chart.getChart(canvas);
+  if (!chart || !data || !data.length) return createTrendChart(canvas, data, period, costNav);
+  period = period || parseInt(canvas.dataset.period) || 1;
+
+  const code = canvas.dataset.code;
+  const fund = funds.find(f => f.code === code);
+
+  const latestDate = data[data.length - 1].date;
+  const [ly, lm, ld] = latestDate.split('-').map(Number);
+  const cutoffBase = new Date(ly, lm - 1, ld);
+  cutoffBase.setMonth(cutoffBase.getMonth() - period);
+  const cutoffDate = formatDate(cutoffBase);
+
+  let baseIdx = 0;
+  for (let i = data.length - 1; i >= 0; i--) { if (data[i].date <= cutoffDate) { baseIdx = i; break; } }
+  const baseNav = data[baseIdx]?.value || 0;
+  if (baseNav <= 0) return chart;
+
+  const recent = data.slice(baseIdx).filter(d => d && d.value > 0);
+  if (recent.length < 2) return chart;
+
+  const navs = recent.map(d => d.value);
+  const baseVal = navs[0];
+  const pcts = navs.map(v => ((v - baseVal) / baseVal) * 100);
+  const maxAbs = Math.max(Math.abs(Math.min(...pcts)), Math.abs(Math.max(...pcts)));
+  const yHalf = (maxAbs / 100) * baseVal;
+  const labels = recent.map(d => d.date.slice(2));
+
+  // 更新涨跌幅标签
+  const lastPct = pcts[pcts.length - 1];
+  const pctEl = document.querySelector(`.period-change[data-code="${code}"]`);
+  if (pctEl) {
+    const cl = lastPct >= 0 ? 'up' : 'down';
+    pctEl.className = 'period-change';
+    pctEl.innerHTML = `<span class="fund-label">本基金</span> <span class="fund-pct ${cl}">${lastPct >= 0 ? '+' : ''}${lastPct.toFixed(2)}%</span>`;
+  }
+
+  // 更新图表数据
+  chart.data.labels = labels;
+  chart.data.datasets[0].data = navs;
+  chart.options.scales.y.min = baseVal - yHalf;
+  chart.options.scales.y.max = baseVal + yHalf;
+
+  chart._rawData = recent;
+  chart._baseVal = baseVal;
+  chart._period = period;
+  if (!costNav || isNaN(costNav) || costNav <= 0) {
+    costNav = (Math.min(...navs) + Math.max(...navs)) / 2;
+  }
+  chart._costNav = costNav;
+
+  // 更新买卖标记
+  chart._markers = [];
+  if (fund && fund.operations && fund.operations.length) {
+    const ops = fund.operations.filter(op =>
+      (op.type === 'add' || op.type === 'reduce') && op.status !== 'cancelled'
+    );
+    ops.forEach(op => {
+      const opDateStr = op.date.slice(0, 10);
+      for (let i = 0; i < recent.length; i++) {
+        if (recent[i].date === opDateStr) { chart._markers.push({ x: i, y: recent[i].value, type: op.type }); break; }
+      }
+    });
+  }
+
+  chart.update();
   return chart;
 }
 
@@ -2684,7 +2755,12 @@ async function switchChartPeriod(period,btn){
   }
   if(history){
     const costNav = _costNav(fund);
-    canvas._chart = createTrendChart(canvas,history,period,costNav);
+    const existingChart = Chart.getChart(canvas);
+    if(existingChart){
+      canvas._chart = updateTrendChart(canvas,history,period,costNav);
+    } else {
+      canvas._chart = createTrendChart(canvas,history,period,costNav);
+    }
   }
 }
 
@@ -2886,6 +2962,8 @@ function closeIndexDetail() {
     clearInterval(_indexRefreshTimer);
     _indexRefreshTimer = null;
   }
+  // 销毁 Chart.js 实例
+  if (_indexChartInstance) { _indexChartInstance.destroy(); _indexChartInstance = null; }
   document.getElementById('indexDetailModal').classList.remove('active');
 }
 
@@ -3194,7 +3272,7 @@ function renderIndexChart(info, rawData, period, apiPreClose, trend5Base) {
       const retryData = indexDataCache[info.code];
       if (retryData && retryData.prev > 0) {
         const retryCanvas = document.getElementById('indexDetailCanvas');
-        if (retryCanvas && retryCanvas._chartImage) {
+        if (retryCanvas && retryCanvas._indexChart) {
           drawIndexChart(retryCanvas, chartPoints, isTrend, cls !== 'down' ? '#ef4444' : '#22c55e', retryData.prev, period);
         }
       }
@@ -3271,575 +3349,407 @@ function _sessionMinute(timeStr) {
   return absMin - (9 * 60 + 30);
 }
 
+// ── 指数图表实例跟踪 ──
+var _indexChartInstance = null;
+
 function drawIndexChart(canvas, points, isTrend, color, preClose, period) {
   try {
-  const rect = canvas.parentElement.getBoundingClientRect();
-  const w = Math.round(rect.width) || 340;
-  const h = 210;
-  const dpr = window.devicePixelRatio || 1;
-  const isDark = document.body.classList.contains('dark');
-  // 每次重置canvas context避免scale叠加（移动端切换周期后图表不渲染的问题）
+  if (!canvas || points.length < 2) { console.warn('drawIndexChart: no canvas or insufficient points', points.length); return; }
   canvas.style.opacity = '1';
-  canvas.width = w * dpr;
-  canvas.height = h * dpr;
-  canvas.style.width = w + 'px';
-  canvas.style.height = h + 'px';
-  
-  const ctx = canvas.getContext('2d');
-  ctx.scale(dpr, dpr);
-  ctx.clearRect(0, 0, w, h);
+  var isDark = document.body.classList.contains('dark');
+  var gridColor = isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)';
+  var axisColor = isDark ? '#94a3b8' : '#64748b';
 
-  if (points.length < 2) {
-    ctx.fillStyle = '#94a3b8';
-    ctx.font = '12px sans-serif';
-    ctx.textAlign = 'center';
-    ctx.fillText('数据不足', w/2, h/2);
-    return;
-  }
-  
-  const pad = { top: 20, bottom: 38, left: 15, right: 15 };
-  const cw = w - pad.left - pad.right;
-  const ch = h - pad.top - pad.bottom;
-  
-  // 计算价格范围
-  let minY, maxY;
-  if (isTrend) {
-    const prices = points.map(p => p.price);
-    if (period === 'trend') {
-      // 分时图：以昨收为基准居中
-      if (preClose > 0) {
-        var maxDevT = Math.max(...prices.map(function(p) { return Math.abs(p - preClose); }));
-        minY = preClose - maxDevT;
-        maxY = preClose + maxDevT;
-      } else {
-        minY = Math.min(...prices);
-        maxY = Math.max(...prices);
-        var rngT = maxY - minY || 1;
-        minY -= rngT * 0.03; maxY += rngT * 0.03;
+  // 销毁旧图表
+  var old = Chart.getChart(canvas);
+  if (old) old.destroy();
+  _indexChartInstance = null;
+
+  // ── 十字线插件 ──
+  var crosshairState = { idx: -1 };
+  // 从所有 dataset 中找到第一个非 null 的数据点位置（跳过基准线数据集）
+  function _findValidElement(chart, idx) {
+    var dsLen = chart.data.datasets.length;
+    // 最后一个 dataset 是基准线，跳过
+    var checkLen = dsLen > 1 ? dsLen - 1 : dsLen;
+    for (var d = 0; d < checkLen; d++) {
+      var val = chart.data.datasets[d].data[idx];
+      if (val !== null && val !== undefined) {
+        var meta = chart.getDatasetMeta(d);
+        if (meta.data[idx] && !meta.data[idx].skip) return meta.data[idx];
       }
-    } else if (period === 'trend5') {
-      // 五日图：以前收盘为基准居中
-      var baseVal5 = preClose > 0 ? preClose : (points.length > 0 ? points[0].price : 0);
-      if (baseVal5 > 0) {
-        var maxDev5 = Math.max(...prices.map(function(p) { return Math.abs(p - baseVal5); }));
-        minY = baseVal5 - maxDev5;
-        maxY = baseVal5 + maxDev5;
-      } else {
-        minY = Math.min(...prices);
-        maxY = Math.max(...prices);
-        var range5 = maxY - minY || 1;
-        minY -= range5 * 0.03; maxY += range5 * 0.03;
-      }
-    } else {
-      minY = Math.min(...prices);
-      maxY = Math.max(...prices);
     }
-  } else {
-    const allPrices = points.flatMap(p => [p.high, p.low, p.close, p.open]);
-    minY = Math.min(...allPrices);
-    maxY = Math.max(...allPrices);
+    return null;
   }
 
-  // 画背景网格
-  ctx.strokeStyle = isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)';
-  ctx.lineWidth = 0.5;
-  for (let i = 0; i <= 4; i++) {
-    const y = pad.top + ch * i / 4;
-    ctx.beginPath(); ctx.moveTo(pad.left, y); ctx.lineTo(w - pad.right, y); ctx.stroke();
-  }
-  
-  // Y 轴价格刻度标签（左侧，所有图表）
-  if (!isTrend || period === 'trend5' || period === 'trend') {
-    const yr = maxY - minY;
-    var decimals = maxY >= 10000 ? 0 : 2; // A股统一2位小数，超大数值时取整
-    ctx.fillStyle = isDark ? '#94a3b8' : '#64748b';
-    ctx.font = '9px sans-serif';
-    ctx.textAlign = 'left';
-    ctx.textBaseline = 'middle';
-    // 三个标签：最高、中间、最低
-    var lblVals = [maxY, (maxY + minY) / 2, minY];
-    var lblYs = [pad.top, pad.top + ch / 2, pad.top + ch];
-    for (var li = 0; li < 3; li++) {
-      ctx.fillText(lblVals[li].toFixed(decimals), 2, lblYs[li]);
+  var crosshairPlugin = {
+    id: 'indexCrosshair',
+    afterEvent: function(chart, args) {
+      var event = args.event;
+      if (event.type === 'mousemove' || event.type === 'click') {
+        var x = event.x;
+        var xScale = chart.scales.x;
+        if (xScale && x >= xScale.left && x <= xScale.right) {
+          var val = xScale.getValueForPixel(x);
+          var dataLen = chart.data.datasets[0].data.length;
+          var idx = -1;
+          if (xScale.type === 'timeseries' || xScale.type === 'time') {
+            var bestDist = Infinity;
+            for (var i = 0; i < dataLen; i++) {
+              var pt = chart.data.datasets[0].data[i];
+              var t = pt && (pt.t !== undefined ? pt.t : pt.x);
+              if (t == null) continue;
+              var d = Math.abs(t - val);
+              if (d < bestDist) { bestDist = d; idx = i; }
+            }
+          } else {
+            idx = Math.round(val);
+          }
+          if (idx >= 0 && idx < dataLen && _findValidElement(chart, idx)) {
+            crosshairState.idx = idx;
+          } else {
+            crosshairState.idx = -1;
+          }
+        }
+      } else if (event.type === 'mouseout') {
+        crosshairState.idx = -1;
+        _clearICInfo();
+      }
+    },
+    afterDraw: function(chart) {
+      if (crosshairState.idx < 0) return;
+      var idx = crosshairState.idx;
+      var el = _findValidElement(chart, idx);
+      if (!el) return;
+      var ctx = chart.ctx;
+      var chartArea = chart.chartArea;
+      ctx.save();
+      ctx.setLineDash([4, 3]);
+      ctx.strokeStyle = isDark ? 'rgba(148,163,184,0.6)' : 'rgba(71,85,105,0.5)';
+      ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(el.x, chartArea.top); ctx.lineTo(el.x, chartArea.bottom); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(chartArea.left, el.y); ctx.lineTo(chartArea.right, el.y); ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.fillStyle = isDark ? '#f1f5f9' : '#0f172a';
+      ctx.beginPath(); ctx.arc(el.x, el.y, 2.5, 0, Math.PI * 2); ctx.fill();
+      ctx.restore();
+      _updateICInfo(points, idx, isTrend, period, preClose, color);
     }
-  }
-  
-  // 基准线（灰色虚线，分时/五日图均以昨收/前收为基准）
-  if (isTrend && (period === 'trend' || period === 'trend5')) {
-    const baseVal = preClose > 0 ? preClose : points[0].price;
-    if (!baseVal || baseVal <= 0) { /* skip baseline */ } else {
-    const py = yPos(baseVal);
-    ctx.save();
-    ctx.setLineDash([4, 3]);
-    ctx.strokeStyle = isDark ? 'rgba(148,163,184,0.6)' : 'rgba(100,116,139,0.5)';
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo(pad.left, py);
-    ctx.lineTo(w - pad.right, py);
-    ctx.stroke();
-    ctx.restore();
-    // 在右侧标注
-    const label = period === 'trend' ? '昨收' : '前收';
-    ctx.fillStyle = isDark ? 'rgba(148,163,184,0.5)' : 'rgba(100,116,139,0.45)';
-    ctx.font = '9px sans-serif';
-    ctx.textAlign = 'right';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(label, w - pad.right - 4, py);
-    }
-  }
-  
-  function yPos(val) { return pad.top + ch * (1 - (val - minY) / (maxY - minY)); }
-  function xPos(idx) { return pad.left + cw * idx / (points.length - 1); }
-  
-  // ── 分时图按真实交易时间定位（非均分） ──
-  function xPosForTrend(timeStr) {
-    var sm = Math.max(0, Math.min(TOTAL_SESSION_MIN, _sessionMinute(timeStr)));
-    return pad.left + cw * sm / TOTAL_SESSION_MIN;
-  }
-  
+  };
+
   if (isTrend) {
-    // 五日图：按交易日分组，日间断开不连线
+    // ── 分时 / 五日图：折线图 ──
+    var labels, dataVals, segmentColors = null;
+
     if (period === 'trend5') {
+      // 五日图：按日分段着色
       var tdDays = [], tdGroups = [];
       points.forEach(function(p) {
         var d = p.time.slice(0, 10);
         if (tdGroups.length === 0 || tdDays[tdDays.length-1] !== d) { tdDays.push(d); tdGroups.push([]); }
         tdGroups[tdGroups.length-1].push(p);
       });
-      // 限制最多5个交易日（当天未收盘时不足240根，1200数据点会跨到第6天）
       if (tdDays.length > 5) { tdDays = tdDays.slice(tdDays.length-5); tdGroups = tdGroups.slice(tdGroups.length-5); }
-      var tdLen = tdDays.length;
-      // 每天的前日收盘：首日用API昨收，后续用前一日最后一笔价格
       var tdPrevCloses = [];
       for (var tdi = 0; tdi < tdGroups.length; tdi++) {
-        if (tdi === 0) {
-          tdPrevCloses.push(preClose > 0 ? preClose : tdGroups[0][0].price);
-        } else {
-          var prevGroup = tdGroups[tdi - 1];
-          tdPrevCloses.push(prevGroup[prevGroup.length - 1].price);
-        }
+        tdPrevCloses.push(tdi === 0 ? (preClose > 0 ? preClose : tdGroups[0][0].price) : tdGroups[tdi-1][tdGroups[tdi-1].length-1].price);
       }
+      labels = []; dataVals = []; segmentColors = [];
       for (var di = 0; di < tdGroups.length; di++) {
         var dps = tdGroups[di];
-        if (dps.length < 2) continue;
-        // 根据该日涨跌确定颜色（基于该日前日收盘）
         var dayLast = dps[dps.length - 1].price;
         var dayPrev = tdPrevCloses[di] > 0 ? tdPrevCloses[di] : dayLast;
         var dayColor = dayLast >= dayPrev ? '#ef4444' : '#22c55e';
-        ctx.beginPath();
-        ctx.strokeStyle = dayColor;
-        ctx.lineWidth = 2;
-        ctx.lineJoin = 'round';
-        ctx.lineCap = 'round';
-        dps.forEach(function(p, i) {
-          var x = pad.left + cw * (di / tdLen + Math.max(0, Math.min(TOTAL_SESSION_MIN, _sessionMinute(p.time))) / TOTAL_SESSION_MIN / tdLen);
-          var y = yPos(p.price);
-          if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+        // 日间插入 null 断开连线（日间跳空不连线）
+        if (di > 0) { labels.push(''); dataVals.push(null); segmentColors.push(dayColor); }
+        dps.forEach(function(p) {
+          labels.push(p.time.slice(5, 16));
+          dataVals.push(p.price);
+          segmentColors.push(dayColor);
         });
-        ctx.stroke();
-        var gradient = ctx.createLinearGradient(0, pad.top, 0, pad.top + ch);
-        gradient.addColorStop(0, dayColor + '30');
-        gradient.addColorStop(1, dayColor + '05');
-        var lx1 = pad.left + cw * (di / tdLen + Math.max(0, Math.min(TOTAL_SESSION_MIN, _sessionMinute(dps[dps.length-1].time))) / TOTAL_SESSION_MIN / tdLen);
-        ctx.lineTo(lx1, pad.top + ch);
-        var fx1 = pad.left + cw * (di / tdLen + Math.max(0, Math.min(TOTAL_SESSION_MIN, _sessionMinute(dps[0].time))) / TOTAL_SESSION_MIN / tdLen);
-        ctx.lineTo(fx1, pad.top + ch);
-        ctx.closePath();
-        ctx.fillStyle = gradient;
-        ctx.fill();
       }
     } else {
-    // 单日分时线
-    ctx.beginPath();
-    ctx.strokeStyle = color;
-    ctx.lineWidth = 2;
-    ctx.lineJoin = 'round';
-    ctx.lineCap = 'round';
-
-    points.forEach((p, i) => {
-      const x = xPosForTrend(p.time);
-      const y = yPos(p.price);
-      if (i === 0) ctx.moveTo(x, y);
-      else ctx.lineTo(x, y);
-    });
-    ctx.stroke();
-
-    // 填充渐变
-    const lastX = xPosForTrend(points[points.length - 1].time);
-    const lastY = yPos(points[points.length - 1].price);
-    const gradient = ctx.createLinearGradient(0, pad.top, 0, pad.top + ch);
-    gradient.addColorStop(0, color + '30');
-    gradient.addColorStop(1, color + '05');
-    ctx.lineTo(lastX, pad.top + ch);
-    const firstX = xPosForTrend(points[0].time);
-    ctx.lineTo(firstX, pad.top + ch);
-    ctx.closePath();
-    ctx.fillStyle = gradient;
-    ctx.fill();
+      labels = points.map(function(p) { return p.time.slice(11, 16); });
+      dataVals = points.map(function(p) { return p.price; });
     }
 
-  } else {
-    // 蜡烛图
-    const candleW = Math.max(3, cw / points.length * 0.5);
-    const halfW = candleW / 2;
-    const wickW = 1;
-    
-    // 画成交量柱（底部）
-    const volMax = Math.max(...points.map(p => p.vol));
-    if (volMax > 0) {
-      points.forEach((p, i) => {
-        const x = xPos(i);
-        const barW = Math.max(1, cw / points.length * 0.6);
-        const isUp = p.close >= p.open;
-        const barColor = isUp ? 'rgba(239,68,68,0.2)' : 'rgba(34,197,94,0.2)';
-        const volH = (p.vol / volMax) * ch * 0.15;
-        ctx.fillStyle = barColor;
-        ctx.fillRect(x - barW/2, pad.top + ch - volH, barW, volH);
+    var validVals = dataVals.filter(function(v) { return v !== null; });
+    var baseVal = validVals[0];
+    var pcts = validVals.map(function(v) { return ((v - baseVal) / baseVal) * 100; });
+    var maxAbs = Math.max(Math.abs(Math.min.apply(null, pcts)), Math.abs(Math.max.apply(null, pcts)));
+    var yHalf = (maxAbs / 100) * baseVal;
+
+    var lineColor = color;
+    var datasets = [];
+    if (segmentColors && period === 'trend5') {
+      // 五日图：每天独立 dataset，填充色跟线色同步
+      var dayStart = 0;
+      for (var di = 0; di < tdGroups.length; di++) {
+        var dayColor = segmentColors[dayStart];
+        var dayData = new Array(labels.length).fill(null);
+        var startIdx = di > 0 ? dayStart + 1 : dayStart; // 跳过 null 分隔点
+        for (var qi = startIdx; qi < labels.length && dataVals[qi] !== null; qi++) {
+          dayData[qi] = dataVals[qi];
+        }
+        dayStart += tdGroups[di].length + (di > 0 ? 1 : 0);
+        datasets.push({
+          data: dayData,
+          borderColor: dayColor,
+          borderWidth: 2,
+          pointRadius: 0,
+          pointHoverRadius: 0,
+          fill: true,
+          tension: 0.2,
+          backgroundColor: function(c) {
+            var area = c.chart.chartArea;
+            if (!area) return c.dataset.borderColor + '30';
+            var g = c.chart.ctx.createLinearGradient(0, area.top, 0, area.bottom);
+            g.addColorStop(0, c.dataset.borderColor + '30');
+            g.addColorStop(1, c.dataset.borderColor + '05');
+            return g;
+          }
+        });
+      }
+    } else {
+      datasets.push({
+        data: dataVals,
+        borderColor: lineColor,
+        borderWidth: 2,
+        pointRadius: 0,
+        pointHoverRadius: 0,
+        fill: true,
+        tension: 0.2,
+        backgroundColor: function(ctx) {
+          var area = ctx.chart.chartArea;
+          if (!area) return lineColor + '30';
+          var g = ctx.chart.ctx.createLinearGradient(0, area.top, 0, area.bottom);
+          g.addColorStop(0, lineColor + '30');
+          g.addColorStop(1, lineColor + '05');
+          return g;
+        }
       });
     }
-    
-    // 画蜡烛
-    points.forEach((p, i) => {
-      const isUp = p.close >= p.open;
-      const candleColor = isUp ? '#ef4444' : '#22c55e';
 
-      const priceLow = Math.min(p.open, p.close);
-      const priceHigh = Math.max(p.open, p.close);
-      const yLow = yPos(priceLow);
-      const yHigh = yPos(priceHigh);
-      const bodyH = Math.max(1, yLow - yHigh);
+    // 基准线（昨收/前收）
+    var refLine = preClose > 0 ? preClose : (points.length > 0 ? points[0].price : 0);
+    if (refLine > 0) {
+      var refData = dataVals.map(function(v) { return v === null ? null : refLine; });
+      datasets.push({
+        data: refData,
+        borderColor: isDark ? 'rgba(148,163,184,0.6)' : 'rgba(100,116,139,0.5)',
+        borderWidth: 1,
+        borderDash: [4, 3],
+        pointRadius: 0,
+        pointHoverRadius: 0,
+        fill: false,
+        tension: 0
+      });
+    }
 
-      // 实体位置
-      const rw = Math.max(2, Math.round(candleW));
-      const rx = Math.round(xPos(i) - rw / 2);
-      const cx = rx + rw / 2;
+    // 五日图：记录每天中间位置（含 null 分隔点）和日期标签
+    var _dayLabelMap = {};
+    if (period === 'trend5') {
+      var _ds = -1;
+      for (var _i = 0; _i <= labels.length; _i++) {
+        if (_i < labels.length && labels[_i] !== '' && _ds < 0) _ds = _i;
+        if (_ds >= 0 && (_i === labels.length || labels[_i] === '')) {
+          var _mid = Math.floor((_ds + _i) / 2);
+          _dayLabelMap[_mid] = labels[_ds].slice(0, 5);
+          _ds = -1;
+        }
+      }
+    }
 
-      // 影线（以实体中心为基准）
-      ctx.strokeStyle = candleColor;
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      ctx.moveTo(cx, Math.round(yPos(p.high)));
-      ctx.lineTo(cx, Math.round(yPos(p.low)));
-      ctx.stroke();
+    _indexChartInstance = new Chart(canvas, {
+      type: 'line',
+      data: { labels: labels, datasets: datasets },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        animation: { duration: 800, easing: 'easeOutQuart' },
+        interaction: { mode: 'index', intersect: false },
+        plugins: { legend: { display: false }, tooltip: { enabled: false } },
+        layout: { padding: { right: period === 'trend5' ? 15 : 0 } },
+        scales: {
+          x: {
+            grid: { display: false },
+            border: { display: false },
+            ticks: { color: axisColor, font: { size: 9 }, maxRotation: 0, autoSkip: false,
+              callback: function(val, idx) {
+                if (_dayLabelMap[idx]) return _dayLabelMap[idx];
+                if (Object.keys(_dayLabelMap).length > 0) return '';
+                var len = this.chart.data.labels.length;
+                if (idx === 0) return '09:30';
+                if (idx === Math.floor((len - 1) / 2)) return '11:30/13:00';
+                if (idx === len - 1) return '15:00';
+                return '';
+              }
+            }
+          },
+          y: {
+            position: 'left',
+            grid: { color: gridColor, drawBorder: false },
+            border: { display: false },
+            min: baseVal - yHalf,
+            max: baseVal + yHalf,
+            ticks: { color: axisColor, font: { size: 9 }, count: 5, mirror: true,
+              callback: function(val) { return (((val - baseVal) / baseVal) * 100).toFixed(2) + '%'; }
+            }
+          }
+        }
+      },
+      plugins: [crosshairPlugin]
+    });
 
-      // 实体
-      ctx.fillStyle = isUp ? '#ef4444' : '#22c55e';
-      ctx.fillRect(rx, Math.round(yHigh), rw, Math.round(bodyH));
+  } else {
+    // ── K线图：浮动柱 + 自定义影线插件 ──
+    var allPrices = points.flatMap(function(p) { return [p.high, p.low]; });
+    var minY = Math.min.apply(null, allPrices);
+    var maxY = Math.max.apply(null, allPrices);
+    var rng = (maxY - minY) || 1;
+    minY -= rng * 0.05; maxY += rng * 0.05;
+
+    // 浮动柱数据：[min(open,close), max(open,close)] 画蜡烛实体
+    var bodyData = points.map(function(p) {
+      return [Math.min(p.open, p.close), Math.max(p.open, p.close)];
+    });
+    var barBgColors = points.map(function(p) { return p.close >= p.open ? '#ef4444' : '#22c55e'; });
+    var barBorderColors = points.map(function(p) { return p.close >= p.open ? '#ef4444' : '#22c55e'; });
+    var wickColors = points.map(function(p) { return p.close >= p.open ? '#b91c1c' : '#15803d'; });
+
+    // 影线插件：在实体上方和下方画竖线（high-low）
+    var wickPlugin = {
+      id: 'candleWick',
+      beforeDatasetsDraw: function(chart) {
+        var meta = chart.getDatasetMeta(0);
+        var ctx = chart.ctx;
+        meta.data.forEach(function(el, i) {
+          var p = points[i];
+          ctx.save();
+          ctx.strokeStyle = wickColors[i];
+          ctx.lineWidth = 1;
+          var x = el.x;
+          ctx.beginPath();
+          ctx.moveTo(x, chart.scales.y.getPixelForValue(p.high));
+          ctx.lineTo(x, chart.scales.y.getPixelForValue(p.low));
+          ctx.stroke();
+          ctx.restore();
+        });
+      }
+    };
+
+    _indexChartInstance = new Chart(canvas, {
+      type: 'bar',
+      data: {
+        labels: points.map(function(p) { return p.time.slice(2); }),
+        datasets: [{
+          data: bodyData,
+          backgroundColor: barBgColors,
+          borderColor: barBorderColors,
+          borderWidth: 1,
+          barPercentage: 0.7,
+          categoryPercentage: 0.8
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        devicePixelRatio: window.devicePixelRatio || 2,
+        animation: { duration: 800, easing: 'easeOutQuart' },
+        interaction: { mode: 'index', intersect: false },
+        plugins: { legend: { display: false }, tooltip: { enabled: false } },
+        scales: {
+          x: {
+            grid: { display: false },
+            border: { display: false },
+            ticks: { color: axisColor, font: { size: 9 }, maxRotation: 0, autoSkip: false,
+              callback: function(val, idx) {
+                var len = this.chart.data.labels.length;
+                if (idx === 0 || idx === Math.floor((len - 1) / 2) || idx === len - 1) return this.getLabelForValue(val);
+                return '';
+              }
+            }
+          },
+          y: {
+            position: 'left',
+            grid: { color: gridColor, drawBorder: false },
+            border: { display: false },
+            min: minY,
+            max: maxY,
+            ticks: { color: axisColor, font: { size: 9 }, count: 5, mirror: true,
+              callback: function(val) { return val.toFixed(2); }
+            }
+          }
+        }
+      },
+      plugins: [wickPlugin, crosshairPlugin]
     });
   }
-  
-  // 标记最新价
-  const last = points[points.length - 1];
-  const lastPrice = isTrend ? last.price : last.close;
-  var lx;
-  if (isTrend && period === 'trend') {
-    lx = xPosForTrend(last.time);
-  } else if (isTrend && period === 'trend5') {
-    var t5d = tdDays.length - 1;
-    lx = pad.left + cw * (t5d / tdDays.length + (Math.max(0, Math.min(TOTAL_SESSION_MIN, _sessionMinute(last.time))) / TOTAL_SESSION_MIN) / tdDays.length);
+
+  canvas._indexChart = _indexChartInstance;
+
+  // 初始化信息条
+  _updateICInfo(points, points.length - 1, isTrend, period, preClose, color);
+
+  } catch(e) { console.warn('drawIndexChart error:', e); }
+}
+
+function _updateICInfo(points, idx, isTrend, period, preClose, color) {
+  var dEl = document.getElementById('icDate');
+  var cEl = document.getElementById('icClose');
+  var pEl = document.getElementById('icPct');
+  var oEl = document.getElementById('icOpen');
+  if (!dEl || idx < 0 || idx >= points.length) return;
+  var p = points[idx];
+  if (isTrend) {
+    var tLabel = period === 'trend' ? p.time.slice(11, 16) : p.time.slice(5, 16);
+    $ic(dEl, '时间 ' + tLabel);
+    var trOpen;
+    if (period === 'trend') { trOpen = points[0].price; }
+    else {
+      var pDate = p.time.slice(0, 10);
+      var firstOfDay = points.find(function(pt) { return pt.time.slice(0, 10) === pDate; });
+      trOpen = firstOfDay ? firstOfDay.price : p.price;
+    }
+    var trIsUp = p.price >= trOpen;
+    $ic(cEl, '收 ' + p.price.toFixed(2), trIsUp ? 'var(--color-up)' : 'var(--color-down)');
+    if (oEl && oEl.parentElement) oEl.parentElement.style.display = '';
+    $ic(oEl, '开 ' + trOpen.toFixed(2), trIsUp ? 'var(--color-up)' : 'var(--color-down)');
+    var prevPrice;
+    if (period === 'trend') { prevPrice = preClose > 0 ? preClose : p.price; }
+    else {
+      // 五日图：基于上个交易日收盘价
+      var curDate = p.time.slice(0, 10);
+      var lastPrevPrice = null;
+      for (var pi = 0; pi < idx; pi++) {
+        if (points[pi].time.slice(0, 10) !== curDate) {
+          lastPrevPrice = points[pi].price;
+        } else if (lastPrevPrice !== null) {
+          break;
+        }
+      }
+      prevPrice = lastPrevPrice !== null ? lastPrevPrice : (preClose > 0 ? preClose : p.price);
+    }
+    var pct = calcPct(p.price, prevPrice);
+    $ic(pEl, pct.txt || '涨幅 --', pct.clr || 'var(--text-muted)');
   } else {
-    lx = xPos(points.length - 1);
-  }
-  const ly = yPos(lastPrice);
-  
-  ctx.fillStyle = color;
-  ctx.beginPath();
-  ctx.arc(lx, ly, 2.5, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.strokeStyle = '#fff';
-  ctx.lineWidth = 1.5;
-  ctx.stroke();
-  
-  // 底部 X 轴标注
-  ctx.fillStyle = isDark ? '#94a3b8' : '#64748b';
-  ctx.font = 'bold 10px sans-serif';
-  ctx.textBaseline = 'bottom';
-
-  function formatDateLabel(t) {
-    if (period === 'trend') {
-      return t.slice(11, 16);
-    } else if (period === 'trend5') {
-      var parts = t.slice(0, 10).split('-');
-      return parts[1] + '/' + parts[2];
-    } else {
-      var d = t.slice(0, 10);
-      return d.slice(2);
-    }
-  }
-
-  var labelItems = [];
-  if (period === 'trend') {
-    // 分时图：标签按固定交易时间节点定位（09:30 / 11:30|13:00 / 15:00）
-    labelItems.push({ x: pad.left, label: '09:30', align: 'left' });
-    labelItems.push({ x: pad.left + cw * 120 / TOTAL_SESSION_MIN, label: '11:30|13:00', align: 'center' });
-    labelItems.push({ x: pad.left + cw, label: '15:00', align: 'right' });
-  } else if (period === 'trend5') {
-    if (isTrend && tdDays.length > 0) {
-      for (var di = 0; di < tdDays.length; di++) {
-        var labelX = pad.left + cw * (di + 0.5) / tdDays.length;
-        labelItems.push({ x: labelX, label: formatDateLabel(tdDays[di] + ' 00:00'), align: 'center' });
-      }
-    } else {
-      labelItems.push({ x: xPos(0), label: formatDateLabel(points[0].time), align: 'left' });
-      labelItems.push({ x: xPos(Math.floor(points.length / 2)), label: formatDateLabel(points[Math.floor(points.length / 2)].time), align: 'center' });
-      labelItems.push({ x: xPos(points.length - 1), label: formatDateLabel(points[points.length - 1].time), align: 'right' });
-    }
-  } else {
-    labelItems.push({ x: xPos(0), label: formatDateLabel(points[0].time), align: 'left' });
-    labelItems.push({ x: xPos(Math.floor(points.length / 2)), label: formatDateLabel(points[Math.floor(points.length / 2)].time), align: 'center' });
-    labelItems.push({ x: xPos(points.length - 1), label: formatDateLabel(points[points.length - 1].time), align: 'right' });
-  }
-  labelItems.forEach(function(it) {
-    ctx.textAlign = it.align;
-    ctx.fillText(it.label, it.x, pad.top + ch + 18);
-  });
-  
-  // 底部横线（时间轴）
-  ctx.strokeStyle = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.07)';
-  ctx.lineWidth = 0.5;
-  ctx.beginPath();
-  ctx.moveTo(pad.left, pad.top + ch + 2);
-  ctx.lineTo(pad.left + cw, pad.top + ch + 2);
-  ctx.stroke();
-  
-  // ── 保存图表状态（用于十字定位轴） ──
-  canvas._indexChartState = { points, isTrend, period, pad, cw, ch, minY, maxY, color, w, h, isDark: document.body.classList.contains('dark'), preClose, tdDays: period === 'trend5' ? tdDays : null, tdPrevCloses: period === 'trend5' ? tdPrevCloses : null };
-  try{ canvas._chartImage = ctx.getImageData(0,0,canvas.width,canvas.height); }catch(e){}
-  setupIndexCrosshair(canvas);
-  
-  // 初始化信息条（显示最后一个点的数据）
-  const lastP = points[points.length - 1];
-  const lastV = isTrend ? lastP.price : lastP.close;
-  const dEl = document.getElementById('icDate');
-  const cEl = document.getElementById('icClose');
-  const pEl = document.getElementById('icPct');
-  const oEl = document.getElementById('icOpen');
-
-  if (dEl) {
-    if (isTrend) {
-      // 分时：涨幅基于昨收；五日：基于最后一天的前日收盘
-      var prevPrice;
-      if (period === 'trend') {
-        prevPrice = preClose > 0 ? preClose : lastV;
-      } else if (period === 'trend5' && tdPrevCloses && tdPrevCloses.length) {
-        prevPrice = tdPrevCloses[tdPrevCloses.length - 1];
-      } else {
-        prevPrice = points.length >= 2 ? points[points.length - 2].price : lastV;
-      }
-      const pct = calcPct(lastV, prevPrice);
-      var timeLabel = period === 'trend' ? lastP.time.slice(11, 16) : lastP.time;
-      $ic(dEl, `时间 ${timeLabel}`);
-      $ic(cEl, lastV.toFixed(2), color);
-      $ic(oEl, '', '');
-      if (oEl && oEl.parentElement) oEl.parentElement.style.display = 'none';
-      $ic(pEl, pct.txt || '涨幅 --', pct.clr || 'var(--text-muted)');
-    } else {
-      if (oEl && oEl.parentElement) oEl.parentElement.style.display = '';
-      // K线涨幅基于前一根收盘价
-      const prevClose = points.length >= 2 ? points[points.length - 2].close : lastP.close;
-      const pct = calcPct(lastP.close, prevClose);
-      const isUp = lastP.close >= lastP.open;
-      const kColor = isUp ? '#ef4444' : '#22c55e';
-      $ic(dEl, `时间 ${lastP.time}`);
-      $ic(cEl, `收 ${lastP.close.toFixed(2)}`, kColor);
-      $ic(oEl, `开 ${lastP.open.toFixed(2)}`, kColor);
-      $ic(pEl, pct.txt || '涨幅 --', pct.clr || 'var(--text-muted)');
-    }
-  }
-} catch(e){ console.warn('drawIndexChart error:',e); }
-}
-
-// ── 指数图表十字定位轴 ──
-function setupIndexCrosshair(canvas) {
-  if (!canvas) return;
-  canvas.removeEventListener('mousemove', _onIndexCrossMove);
-  canvas.removeEventListener('mouseleave', _onIndexCrossLeave);
-  canvas.removeEventListener('touchstart', _onIndexCrossTouchStart);
-  canvas.removeEventListener('touchmove', _onIndexCrossTouchMove);
-  canvas.removeEventListener('touchend', _onIndexCrossTouchEnd);
-  canvas.addEventListener('mousemove', _onIndexCrossMove);
-  canvas.addEventListener('mouseleave', _onIndexCrossLeave);
-  canvas.addEventListener('touchstart', _onIndexCrossTouchStart, { passive: false });
-  canvas.addEventListener('touchmove', _onIndexCrossTouchMove, { passive: false });
-  canvas.addEventListener('touchend', _onIndexCrossTouchEnd, { passive: false });
-}
-
-function _onIndexCrossMove(e) {
-  const canvas = e.currentTarget;
-  const st = canvas._indexChartState;
-  if (!st || !canvas._chartImage) return;
-  const rect = canvas.getBoundingClientRect();
-  const mx = (e.clientX - rect.left) * (canvas.width / rect.width);
-  const my = (e.clientY - rect.top) * (canvas.height / rect.height);
-  _drawIndexCrosshair(canvas, mx, my, st);
-}
-
-function _onIndexCrossTouchStart(e) {
-  e.preventDefault();
-  const canvas = e.currentTarget;
-  canvas._touchActive = true;
-  _updateIndexCrossFromTouch(canvas, e.touches[0]);
-}
-function _onIndexCrossTouchMove(e) {
-  e.preventDefault();
-  const canvas = e.currentTarget;
-  if (!canvas._touchActive) return;
-  _updateIndexCrossFromTouch(canvas, e.touches[0]);
-}
-function _onIndexCrossTouchEnd(e) {
-  const canvas = e.currentTarget;
-  canvas._touchActive = false;
-  setTimeout(() => {
-    if (!canvas._touchActive && canvas._chartImage) {
-      const ctx = canvas.getContext('2d');
-      ctx.putImageData(canvas._chartImage, 0, 0);
-      _clearICInfo();
-    }
-  }, 1500);
-}
-function _updateIndexCrossFromTouch(canvas, touch) {
-  const rect = canvas.getBoundingClientRect();
-  const mx = (touch.clientX - rect.left) * (canvas.width / rect.width);
-  const my = (touch.clientY - rect.top) * (canvas.height / rect.height);
-  _drawIndexCrosshair(canvas, mx, my, canvas._indexChartState);
-}
-function _onIndexCrossLeave(e) {
-  const canvas = e.currentTarget;
-  if (!canvas._chartImage) return;
-  const ctx = canvas.getContext('2d');
-  ctx.putImageData(canvas._chartImage, 0, 0);
-  _clearICInfo();
-}
-
-function _drawIndexCrosshair(canvas, mx, my, st) {
-  const { points, isTrend, period, pad, cw, ch, minY, maxY, color, w, h, isDark } = st;
-  const ctx = canvas.getContext('2d');
-  const dpr = window.devicePixelRatio || 1;
-  
-  // 恢复原图
-  if (canvas._chartImage) ctx.putImageData(canvas._chartImage, 0, 0);
-  
-  const sx = (mx / dpr - pad.left) / cw; // 相对位置 0~1
-  let idx, px, p;
-  
-  if (isTrend && period === 'trend') {
-    // 分时图：按交易时间定位，找离鼠标最近的数据点
-    var targetMin = Math.max(0, Math.min(TOTAL_SESSION_MIN,sx * TOTAL_SESSION_MIN));
-    idx = 0;
-    var bestDist = Infinity;
-    for (var i = 0; i < points.length; i++) {
-      var pm = _sessionMinute(points[i].time);
-      var d = Math.abs(pm - targetMin);
-      if (d < bestDist) { bestDist = d; idx = i; }
-    }
-    p = points[idx];
-    px = pad.left + cw * (Math.max(0, Math.min(TOTAL_SESSION_MIN,_sessionMinute(p.time))) / TOTAL_SESSION_MIN);
-  } else if (isTrend && period === 'trend5' && st.tdDays && st.tdDays.length) {
-    // 五日图：先定位到哪一天，再按那天的交易时间找最近点
-    var t5d = st.tdDays;
-    var dayIdx = Math.min(t5d.length - 1, Math.floor(sx * t5d.length));
-    var dayStart = dayIdx / t5d.length;
-    var dayWidth = 1 / t5d.length;
-    var withinDay = Math.max(0, Math.min(1, (sx - dayStart) / dayWidth));
-    var targetMin5 = Math.max(0, Math.min(TOTAL_SESSION_MIN, withinDay * TOTAL_SESSION_MIN));
-    idx = 0;
-    var bestDist5 = Infinity;
-    for (var i2 = 0; i2 < points.length; i2++) {
-      if (points[i2].time.slice(0, 10) !== t5d[dayIdx]) continue;
-      var pm5 = _sessionMinute(points[i2].time);
-      var d5 = Math.abs(pm5 - targetMin5);
-      if (d5 < bestDist5) { bestDist5 = d5; idx = i2; }
-    }
-    p = points[idx];
-    var realDi = t5d.indexOf(p.time.slice(0, 10));
-    px = pad.left + cw * (realDi / t5d.length + (Math.max(0, Math.min(TOTAL_SESSION_MIN, _sessionMinute(p.time))) / TOTAL_SESSION_MIN) / t5d.length);
-  } else {
-    idx = Math.round(sx * (points.length - 1));
-    idx = Math.max(0, Math.min(points.length - 1, idx));
-    p = points[idx];
-    px = pad.left + cw * idx / (points.length - 1);
-  }
-  
-  const price = isTrend ? p.price : p.close;
-  const py = pad.top + ch * (1 - (price - minY) / (maxY - minY));
-  
-  // 十字线（数据坐标映射到 CSS 像素）
-  const cssPx = px;
-  const cssPy = py;
-  
-  ctx.save();
-  // 竖线
-  ctx.strokeStyle = isDark ? 'rgba(148,163,184,0.6)' : 'rgba(71,85,105,0.5)';
-  ctx.lineWidth = 1;
-  ctx.setLineDash([4, 3]);
-  ctx.beginPath(); ctx.moveTo(cssPx, pad.top); ctx.lineTo(cssPx, pad.top + ch); ctx.stroke();
-  // 横线
-  ctx.beginPath(); ctx.moveTo(pad.left, cssPy); ctx.lineTo(pad.left + cw, cssPy); ctx.stroke();
-  ctx.setLineDash([]);
-  
-  // 圆点（与基金走势图十字轴点同一配色，无描边）
-  ctx.fillStyle = isDark ? '#f1f5f9' : '#0f172a';
-  ctx.beginPath(); ctx.arc(cssPx, cssPy, 2.5, 0, Math.PI * 2); ctx.fill();
-  ctx.restore();
-  
-  // 更新固定信息条
-  const dEl = document.getElementById('icDate');
-  const cEl = document.getElementById('icClose');
-  const pEl = document.getElementById('icPct');
-  const oEl = document.getElementById('icOpen');
-
-  if (dEl) {
-    if (isTrend) {
-      var tLabel = period === 'trend' ? p.time.slice(11, 16) : p.time;
-      $ic(dEl, `时间 ${tLabel}`);
-      // 分时：开=当日首点价；五日：开=该日首点价
-      var trOpen;
-      if (period === 'trend') {
-        trOpen = points[0].price;
-      } else {
-        var pDate = p.time.slice(0, 10);
-        var firstOfDay = points.find(function(pt) { return pt.time.slice(0, 10) === pDate; });
-        trOpen = firstOfDay ? firstOfDay.price : p.price;
-      }
-      var trIsUp = p.price >= trOpen;
-      $ic(cEl, '收 ' + p.price.toFixed(2), trIsUp ? 'var(--color-up)' : 'var(--color-down)');
-      $ic(oEl, '开 ' + trOpen.toFixed(2), trIsUp ? 'var(--color-up)' : 'var(--color-down)');
-      if (oEl && oEl.parentElement) oEl.parentElement.style.display = '';
-      // 分时：涨幅基于昨收；五日：基于该日前日收盘
-      var prevPrice;
-      if (period === 'trend') {
-        prevPrice = st.preClose > 0 ? st.preClose : p.price;
-      } else if (period === 'trend5' && st.tdPrevCloses && st.tdDays) {
-        var pDay = p.time.slice(0, 10);
-        var pDayIdx = st.tdDays.indexOf(pDay);
-        prevPrice = (pDayIdx >= 0 && pDayIdx < st.tdPrevCloses.length) ? st.tdPrevCloses[pDayIdx] : p.price;
-      } else {
-        prevPrice = idx > 0 ? points[idx - 1].price : p.price;
-      }
-      const pct = calcPct(p.price, prevPrice);
-      $ic(pEl, pct.txt || '涨幅 --', pct.clr || 'var(--text-muted)');
-    } else {
-      if (oEl && oEl.parentElement) oEl.parentElement.style.display = '';
-      const isUp = p.close >= p.open;
-      $ic(dEl, `时间 ${p.time}`);
-      $ic(cEl, `收 ${p.close.toFixed(2)}`, isUp ? 'var(--color-up)' : 'var(--color-down)');
-      $ic(oEl, `开 ${p.open.toFixed(2)}`, isUp ? 'var(--color-up)' : 'var(--color-down)');
-      // K线涨幅基于前一根收盘价
-      const prevClose = idx > 0 ? points[idx - 1].close : p.close;
-      const pct = calcPct(p.close, prevClose);
-      $ic(pEl, pct.txt || '涨幅 --', pct.clr || 'var(--text-muted)');
-    }
+    if (oEl && oEl.parentElement) oEl.parentElement.style.display = '';
+    var isUp = p.close >= p.open;
+    var kColor = isUp ? '#ef4444' : '#22c55e';
+    $ic(dEl, '时间 ' + p.time);
+    $ic(cEl, '收 ' + p.close.toFixed(2), kColor);
+    $ic(oEl, '开 ' + p.open.toFixed(2), kColor);
+    var prevClose = idx > 0 ? points[idx - 1].close : p.close;
+    var pct = calcPct(p.close, prevClose);
+    $ic(pEl, pct.txt || '涨幅 --', pct.clr || 'var(--text-muted)');
   }
 }
+
 
 function _clearICInfo() {
   ['icDate','icClose','icPct','icOpen'].forEach(id => {
     const el = document.getElementById(id);
     if (el) { el.textContent = ''; el.style.color = ''; }
-  });
-  // 确保所有列容器可见
-  ['icDate','icClose','icPct','icOpen'].forEach(id => {
-    const el = document.getElementById(id);
     if (el && el.parentElement) el.parentElement.style.display = '';
   });
 }
