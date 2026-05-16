@@ -2467,9 +2467,9 @@ function createTrendChart(canvas, data, period, costNav, noAnim) {
       ],
     },
     options: {
-      responsive: true,
+      responsive: noAnim ? false : true,
       maintainAspectRatio: false,
-      animation: noAnim ? false : { duration: 800, easing: 'easeOutQuart' },
+      animation: { duration: 800, easing: 'easeOutQuart' },
       interaction: { mode: 'index', intersect: false },
       layout: { padding: { left: 10, right: 10 } },
       plugins: { legend: { display: false }, tooltip: { enabled: false } },
@@ -2510,6 +2510,10 @@ function createTrendChart(canvas, data, period, costNav, noAnim) {
   if (old) old.destroy();
 
   const chart = new Chart(canvas.getContext('2d'), config);
+  if (noAnim) {
+    chart.options.responsive = true;
+    setTimeout(() => chart.resize(), 0);
+  }
   chart._rawData = recent;
   chart._baseVal = baseVal;
   chart._period = period;
@@ -3561,9 +3565,9 @@ function drawIndexChart(canvas, points, isTrend, color, preClose, period, isFirs
       type: 'line',
       data: { labels: labels, datasets: datasets },
       options: {
-        responsive: true,
+        responsive: isFirst ? false : true,
         maintainAspectRatio: false,
-        animation: isFirst ? false : { duration: 800, easing: 'easeOutQuart' },
+        animation: { duration: 800, easing: 'easeOutQuart' },
         interaction: { mode: 'index', intersect: false },
         plugins: { legend: { display: false }, tooltip: { enabled: false } },
         layout: { padding: { right: period === 'trend5' ? 15 : 0 } },
@@ -3649,10 +3653,10 @@ function drawIndexChart(canvas, points, isTrend, color, preClose, period, isFirs
         }]
       },
       options: {
-        responsive: true,
+        responsive: isFirst ? false : true,
         maintainAspectRatio: false,
         devicePixelRatio: window.devicePixelRatio || 2,
-        animation: isFirst ? false : { duration: 800, easing: 'easeOutQuart' },
+        animation: { duration: 800, easing: 'easeOutQuart' },
         interaction: { mode: 'index', intersect: false },
         plugins: { legend: { display: false }, tooltip: { enabled: false } },
         scales: {
@@ -3684,6 +3688,10 @@ function drawIndexChart(canvas, points, isTrend, color, preClose, period, isFirs
   }
 
   canvas._indexChart = _indexChartInstance;
+  if (isFirst) {
+    _indexChartInstance.options.responsive = true;
+    setTimeout(() => _indexChartInstance.resize(), 0);
+  }
 
   // 初始化信息条
   _updateICInfo(points, points.length - 1, isTrend, period, preClose, color);
