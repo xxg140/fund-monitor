@@ -2510,6 +2510,15 @@ function createTrendChart(canvas, data, period, costNav, noAnim) {
   const old = Chart.getChart(canvas);
   if (old) old.destroy();
 
+  // 首次渲染：先固定 canvas 尺寸，防止 Chart.js 读到错误尺寸导致动画闪烁
+  if (noAnim) {
+    const rect = canvas.parentElement.getBoundingClientRect();
+    canvas.width = rect.width * (window.devicePixelRatio || 2);
+    canvas.height = rect.height * (window.devicePixelRatio || 2);
+    canvas.style.width = rect.width + 'px';
+    canvas.style.height = rect.height + 'px';
+  }
+
   const chart = new Chart(canvas.getContext('2d'), config);
   if (noAnim) {
     setTimeout(() => {
@@ -3369,6 +3378,15 @@ function drawIndexChart(canvas, points, isTrend, color, preClose, period, isFirs
   var old = Chart.getChart(canvas);
   if (old) old.destroy();
   _indexChartInstance = null;
+
+  // 首次渲染：固定 canvas 尺寸防止动画闪烁
+  if (isFirst) {
+    var rect = canvas.parentElement.getBoundingClientRect();
+    canvas.width = rect.width * (window.devicePixelRatio || 2);
+    canvas.height = rect.height * (window.devicePixelRatio || 2);
+    canvas.style.width = rect.width + 'px';
+    canvas.style.height = rect.height + 'px';
+  }
 
   // ── 十字线插件 ──
   var crosshairState = { idx: -1 };
