@@ -9,8 +9,8 @@
   /* ===== CSS 变量：定义后深色模式只需改这些值 ===== */
   :root {
     --bg-page: #ffffff;
-    --bg-surface: #f3f7fb;
-    --bg-surface-2: #e2eaf3;
+    --bg-surface: #f5f5f7;
+    --bg-surface-2: #ecedf0;
     --bg-surface-3: #d0dce9;
     --bg-hover: rgba(0,0,0,0.04);
     --bg-hover-strong: rgba(0,0,0,0.08);
@@ -25,11 +25,11 @@
     --border-subtle: #cbd5e1;
     --border-hover: #94a3b8;
     /* 主题色 */
-    --accent: #3b82f6;
-    --accent-dark: #2563eb;
-    --accent-hover: #1d4ed8;
-    --accent-light: #eff6ff;
-    --accent-border: #bfdbfe;
+    --accent: #6b7b8d;
+    --accent-dark: #556575;
+    --accent-hover: #465363;
+    --accent-light: #f2f4f6;
+    --accent-border: #c5cdd5;
     /* 涨跌色 */
     --color-up: #ef4444;
     --color-up-hover: #dc2626;
@@ -40,8 +40,8 @@
   }
   body.dark {
     --bg-page: #000000;
-    --bg-surface: #0f172a;
-    --bg-surface-2: #152030;
+    --bg-surface: #1c1c1e;
+    --bg-surface-2: #2c2c2e;
     --bg-surface-3: #1c2d42;
     --bg-hover: rgba(255,255,255,0.06);
     --bg-hover-strong: rgba(255,255,255,0.1);
@@ -56,11 +56,11 @@
     --border-subtle: #475569;
     --border-hover: #64748b;
     /* 主题色（深色模式下更亮 */
-    --accent: #60a5fa;
-    --accent-dark: #3b82f6;
-    --accent-hover: #2563eb;
-    --accent-light: rgba(59,130,246,0.15);
-    --accent-border: rgba(59,130,246,0.3);
+    --accent: #8a9bae;
+    --accent-dark: #6b7b8d;
+    --accent-hover: #556575;
+    --accent-light: rgba(107,123,141,0.15);
+    --accent-border: rgba(107,123,141,0.3);
     /* 涨跌背景（深浅统一） */
     --color-up-bg: rgba(239,68,68,0.1);
     --color-down-bg: rgba(34,197,94,0.1);
@@ -91,7 +91,7 @@
   }
   .header::after {
     content: ''; position: absolute; bottom: -40%; left: -5%;
-    width: 200px; height: 200px; background: rgba(59,130,246,0.08);
+    width: 200px; height: 200px; background: rgba(107,123,141,0.08);
     border-radius: 50%; pointer-events: none;
   }
   .header h1 { font-size: 18px; font-weight: 700; margin-bottom: 6px; letter-spacing: 0.3px; padding-left: 10px; }
@@ -182,7 +182,7 @@
   .group-tab.active {
     background: linear-gradient(135deg, var(--accent) 0%, var(--accent-dark) 100%);
     color: white; border-color: transparent;
-    box-shadow: 0 1px 3px rgba(59,130,246,0.3);
+    box-shadow: 0 1px 3px rgba(107,123,141,0.3);
   }
   /* 操作区域 */
   .action-area {
@@ -194,7 +194,7 @@
     font-size: 14px; outline: none; background: var(--bg-surface); color: var(--text-primary);
     transition: all 0.15s;
   }
-  .action-input:focus { border-color: var(--accent); background: var(--bg-surface-2); box-shadow: 0 0 0 3px rgba(59,130,246,0.1); }
+  .action-input:focus { border-color: var(--accent); background: var(--bg-surface-2); box-shadow: 0 0 0 3px rgba(107,123,141,0.1); }
   .action-input::placeholder { color: var(--text-muted); }
   .action-input.code-input { width: 90px; }
   .action-input.amount-input { width: 100px; }
@@ -208,7 +208,7 @@
   .action-btn:focus, .action-btn:focus-visible { outline: none; }
   .btn-primary {
     background: linear-gradient(135deg, var(--accent) 0%, var(--accent-dark) 100%);
-    color: white; box-shadow: 0 1px 3px rgba(59,130,246,0.3);
+    color: white; box-shadow: 0 1px 3px rgba(107,123,141,0.3);
   }
   .btn-primary:hover { background: linear-gradient(135deg, var(--accent-dark) 0%, var(--accent-hover) 100%); transform: translateY(-1px); }
   .btn-secondary { background: var(--bg-surface-3); color: var(--text-secondary); border: 1px solid var(--border-default); }
@@ -295,15 +295,17 @@
   }
   .fund-card::-webkit-scrollbar { height: 0; }
 
+
   /* ===== 基金行（独立grid，列宽由JS inline设置） ===== */
   .fund-row {
     display: grid; gap: 0;
+    border-bottom: 1px solid var(--border-default);
   }
+  .fund-row:last-of-type { border-bottom: none; }
   .fund-row > div {
     padding: 6px 8px; white-space: nowrap;
-    text-align: left; border-bottom: 1px solid var(--border-default); background: var(--bg-surface);
+    text-align: left; background: var(--bg-surface);
   }
-  .fund-row:last-of-type > div { border-bottom: none; }
   /* 名称区 */
   .fm-name { display: flex; flex-direction: column; min-width: 0; }
   .fm-fundname {
@@ -315,9 +317,9 @@
   .updated-tag {
     display: inline-block;
     font-size: 10px;
-    color: var(--accent-dark);
-    background: var(--accent-light);
-    border: 1px solid var(--accent-border);
+    color: #2563eb;
+    background: #eff6ff;
+    border: 1px solid #bfdbfe;
     border-radius: 10px;
     padding: 1px 6px;
     font-weight: 500;
@@ -394,10 +396,10 @@
   }
   .detail-controls { display: flex; flex-direction: column; gap: 6px; padding: 4px 0; width: 100%; }
   .detail-controls .chart-tabs { display: flex; flex-direction: row; gap: 6px; flex: 1; }
-  .detail-controls .chart-tab { padding: 3px 0; font-size: 12px; text-align: center; flex: 1; display: block; border: 1px solid var(--border-default); border-radius: 10px; background: var(--bg-surface); color: var(--text-muted); cursor: pointer; font-weight: 500; box-sizing: border-box; line-height:1; }
+  .detail-controls .chart-tab { padding: 8px 0; font-size: 12px; text-align: center; flex: 1; display: block; border: 1px solid var(--border-default); border-radius: 10px; background: var(--bg-surface); color: var(--text-muted); cursor: pointer; font-weight: 500; box-sizing: border-box; line-height:1; }
   .chart-tab { padding: 8px 10px; font-size: 12px; border: 1px solid var(--border-default); border-radius: 10px; background: var(--bg-surface); color: var(--text-muted); cursor: pointer; font-weight: 500; transition: all 0.15s; white-space: nowrap; flex-shrink: 0; min-width:44px; box-sizing: border-box; display:inline-block; line-height:1; }
   .chart-tab:hover { border-color: var(--border-hover); color: var(--text-secondary); }
-  .chart-tab.active { background: linear-gradient(135deg, var(--accent) 0%, var(--accent-dark) 100%); color: white; border-color: transparent; box-shadow: 0 1px 3px rgba(59,130,246,0.3); }
+  .chart-tab.active { background: linear-gradient(135deg, var(--accent) 0%, var(--accent-dark) 100%); color: white; border-color: transparent; box-shadow: 0 1px 3px rgba(107,123,141,0.3); }
   .chart-tab.gear-tab { padding:8px 5px; border:none; background:transparent; color: var(--text-muted); font-size:14px; min-width:26px; text-align:center; margin-left:auto; }
   #actionModal .chart-tab { flex: 1; text-align: center; }
 
@@ -552,7 +554,7 @@
     background: radial-gradient(circle at 0% 0%, rgba(148,163,184,0.12) 0%, rgba(148,163,184,0.04) 40%, transparent 70%), var(--bg-surface);
   }
   body.dark .summary-item:hover { background: var(--bg-hover); }
-  body.dark .group-tab.active { box-shadow: 0 1px 3px rgba(59,130,246,0.4); }
+  body.dark .group-tab.active { box-shadow: 0 1px 3px rgba(107,123,141,0.4); }
 
 
   body.dark .more-dropdown { box-shadow: 0 10px 40px rgba(0,0,0,0.4); }
@@ -560,7 +562,7 @@
   body.dark .more-item.danger:hover { background: var(--bg-hover-strong); }
   body.dark .add-panel, body.dark .batch-panel { box-shadow: 0 4px 20px rgba(0,0,0,0.3); }
 
-  body.dark .updated-tag { color: var(--accent); background: var(--accent-light); border-color: var(--accent-border); }
+  body.dark .updated-tag { color: #60a5fa; background: rgba(59,130,246,0.15); border-color: rgba(59,130,246,0.3); }
   body.dark .modal-overlay { background: var(--bg-overlay); }
   body.dark .modal-box { box-shadow: 0 20px 60px rgba(0,0,0,0.5); }
   body.dark .index-ref.warning { background: var(--bg-danger); border-color: rgba(239,68,68,0.3); }
@@ -899,7 +901,7 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
 <script>
-const APP_VERSION = 'V3';
+const APP_VERSION = 'V4';
 const PERIOD_NAMES = { trend: '分时', trend5: '五日', day: '日K', week: '周K', month: '月K' };
 const XHR_TIMEOUT = 8000;
 const JSONP_TIMEOUT = 10000;
@@ -2381,18 +2383,12 @@ const _trendPlugin = {
       if (costY >= top && costY <= bottom) {
         ctx.save();
         ctx.strokeStyle = isDark ? '#f59e0b' : '#d97706';
-        ctx.lineWidth = 1.5;
+        ctx.lineWidth = 1;
         ctx.setLineDash([6, 4]);
         ctx.beginPath();
         ctx.moveTo(left, costY);
         ctx.lineTo(right, costY);
         ctx.stroke();
-        ctx.setLineDash([]);
-        ctx.fillStyle = isDark ? '#f59e0b' : '#d97706';
-        ctx.font = '9px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
-        ctx.textAlign = 'right';
-        ctx.textBaseline = 'bottom';
-        ctx.fillText('成本 ' + chart._costNav.toFixed(4), right - 2, costY - 4);
         ctx.restore();
       }
     }
@@ -2458,8 +2454,8 @@ function createTrendChart(canvas, data, period, costNav) {
           borderColor: lineColor,
           backgroundColor: (ctx) => {
             const g = ctx.chart.ctx.createLinearGradient(0, 0, 0, ctx.chart.chartArea?.bottom || 200);
-            g.addColorStop(0, isDark ? 'rgba(148,163,184,0.15)' : 'rgba(71,85,105,0.12)');
-            g.addColorStop(1, 'rgba(0,0,0,0)');
+            g.addColorStop(0, isDark ? 'rgba(255,255,255,0.22)' : 'rgba(71,85,105,0.22)');
+            g.addColorStop(1, isDark ? 'rgba(255,255,255,0.03)' : 'rgba(71,85,105,0.03)');
             return g;
           },
           fill: 'start',
@@ -3198,7 +3194,8 @@ function renderIndexChart(info, rawData, period, apiPreClose, trend5Base) {
   
   const body = document.getElementById('indexDetailBody');
   const hasChart = !!document.getElementById('indexChartSection')?.querySelector('canvas');
-  
+  const isFirstRender = !hasChart;
+
   if (!hasChart) {
     // 首次渲染：构建完整界面
     body.innerHTML = `
@@ -3229,7 +3226,7 @@ function renderIndexChart(info, rawData, period, apiPreClose, trend5Base) {
           <div id="icOpen" style="font-weight:600;font-size:12px;"></div>
         </div>
       </div>
-      <div style="position:relative;height:215px;border-radius:10px;background:var(--bg-surface-2);overflow:hidden;">
+      <div style="position:relative;height:215px;border-radius:10px;background:var(--bg-surface);overflow:hidden;">
         <canvas id="indexDetailCanvas" style="width:100%;height:100%;"></canvas>
       
         <div id="hkChartOverlay" style="position:absolute;top:0;left:0;width:100%;height:100%;display:none;align-items:center;justify-content:center;z-index:2;pointer-events:none;"><span style="color:var(--text-secondary);font-size:13px;font-weight:500;background:var(--bg-surface-2);padding:6px 16px;border-radius:6px;">分时/五日暂不支持港股</span></div>
@@ -3254,7 +3251,7 @@ function renderIndexChart(info, rawData, period, apiPreClose, trend5Base) {
   // 画图
   setTimeout(() => {
     if (!canvas || !canvas.parentElement) return;
-    drawIndexChart(canvas, chartPoints, isTrend, cls !== 'down' ? '#ef4444' : '#22c55e', period === 'trend5' ? trend5Ref : prevClose, period);
+    drawIndexChart(canvas, chartPoints, isTrend, cls !== 'down' ? '#ef4444' : '#22c55e', period === 'trend5' ? trend5Ref : prevClose, period, isFirstRender);
 	    // 港股分时/五日：模糊日K + 覆盖层提示
 	    const hkOverlay = document.getElementById('hkChartOverlay');
 	    if (!isTrend && (period === 'trend' || period === 'trend5')) {
@@ -3352,7 +3349,7 @@ function _sessionMinute(timeStr) {
 // ── 指数图表实例跟踪 ──
 var _indexChartInstance = null;
 
-function drawIndexChart(canvas, points, isTrend, color, preClose, period) {
+function drawIndexChart(canvas, points, isTrend, color, preClose, period, isFirst) {
   try {
   if (!canvas || points.length < 2) { console.warn('drawIndexChart: no canvas or insufficient points', points.length); return; }
   canvas.style.opacity = '1';
@@ -3413,7 +3410,7 @@ function drawIndexChart(canvas, points, isTrend, color, preClose, period) {
         }
       } else if (event.type === 'mouseout') {
         crosshairState.idx = -1;
-        _clearICInfo();
+        _updateICInfo(points, points.length - 1, isTrend, period, preClose, color);
       }
     },
     afterDraw: function(chart) {
@@ -3428,7 +3425,6 @@ function drawIndexChart(canvas, points, isTrend, color, preClose, period) {
       ctx.strokeStyle = isDark ? 'rgba(148,163,184,0.6)' : 'rgba(71,85,105,0.5)';
       ctx.lineWidth = 1;
       ctx.beginPath(); ctx.moveTo(el.x, chartArea.top); ctx.lineTo(el.x, chartArea.bottom); ctx.stroke();
-      ctx.beginPath(); ctx.moveTo(chartArea.left, el.y); ctx.lineTo(chartArea.right, el.y); ctx.stroke();
       ctx.setLineDash([]);
       ctx.fillStyle = isDark ? '#f1f5f9' : '#0f172a';
       ctx.beginPath(); ctx.arc(el.x, el.y, 2.5, 0, Math.PI * 2); ctx.fill();
@@ -3566,7 +3562,7 @@ function drawIndexChart(canvas, points, isTrend, color, preClose, period) {
       options: {
         responsive: true,
         maintainAspectRatio: false,
-        animation: { duration: 800, easing: 'easeOutQuart' },
+        animation: isFirst ? false : { duration: 800, easing: 'easeOutQuart' },
         interaction: { mode: 'index', intersect: false },
         plugins: { legend: { display: false }, tooltip: { enabled: false } },
         layout: { padding: { right: period === 'trend5' ? 15 : 0 } },
@@ -3655,7 +3651,7 @@ function drawIndexChart(canvas, points, isTrend, color, preClose, period) {
         responsive: true,
         maintainAspectRatio: false,
         devicePixelRatio: window.devicePixelRatio || 2,
-        animation: { duration: 800, easing: 'easeOutQuart' },
+        animation: isFirst ? false : { duration: 800, easing: 'easeOutQuart' },
         interaction: { mode: 'index', intersect: false },
         plugins: { legend: { display: false }, tooltip: { enabled: false } },
         scales: {
@@ -3714,7 +3710,7 @@ function _updateICInfo(points, idx, isTrend, period, preClose, color) {
     var trIsUp = p.price >= trOpen;
     $ic(cEl, '收 ' + p.price.toFixed(2), trIsUp ? 'var(--color-up)' : 'var(--color-down)');
     if (oEl && oEl.parentElement) oEl.parentElement.style.display = '';
-    $ic(oEl, '开 ' + trOpen.toFixed(2), trIsUp ? 'var(--color-up)' : 'var(--color-down)');
+    $ic(oEl, '开 ' + trOpen.toFixed(2));
     var prevPrice;
     if (period === 'trend') { prevPrice = preClose > 0 ? preClose : p.price; }
     else {
@@ -3738,7 +3734,7 @@ function _updateICInfo(points, idx, isTrend, period, preClose, color) {
     var kColor = isUp ? '#ef4444' : '#22c55e';
     $ic(dEl, '时间 ' + p.time);
     $ic(cEl, '收 ' + p.close.toFixed(2), kColor);
-    $ic(oEl, '开 ' + p.open.toFixed(2), kColor);
+    $ic(oEl, '开 ' + p.open.toFixed(2));
     var prevClose = idx > 0 ? points[idx - 1].close : p.close;
     var pct = calcPct(p.close, prevClose);
     $ic(pEl, pct.txt || '涨幅 --', pct.clr || 'var(--text-muted)');
