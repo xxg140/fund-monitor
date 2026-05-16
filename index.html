@@ -99,9 +99,35 @@
 
   /* ===== 指数栏 ===== */
   .index-bar {
-    padding: 8px 0; display: flex; gap: 10px; align-items: flex-start; overflow-x: auto;
+    padding: 8px 0; display: flex; flex-direction: column; gap: 6px;
   }
+  .index-bar-content { position: relative; min-height: 80px; }
+  #sectorPanel { overflow: hidden; display: flex; flex-direction: column; }
   #indexCards { display: grid; grid-template-columns: repeat(3, minmax(80px, 1fr)); gap: 6px; flex: 1; }
+  .index-bar-tabs { display: flex; gap: 0; margin-bottom: 4px; }
+  .index-bar-tab { flex: 1; text-align: center; padding: 6px 0; font-size: 12px; background: none; border: none; cursor: pointer; color: var(--text-muted); font-weight: 500; border-bottom: 2px solid transparent; margin-bottom: -2px; transition: all 0.15s; }
+  .index-bar-tab:hover { color: var(--text-secondary); }
+  .index-bar-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+  .sector-header { display: flex; padding: 4px 6px; padding-right: 12px; font-size: 11px; color: var(--text-muted); font-weight: 600; border-bottom: 1px solid var(--border-default); cursor: pointer; user-select: none; margin-top: -6px; }
+  .sector-header span:hover { color: var(--text-secondary); }
+  .sector-header .sort-arrow { font-size: 10px; margin-left: 2px; }
+  .sh-name { flex: 1; }
+  .sh-pct { width: 60px; text-align: right; }
+  .sh-flow { width: 70px; text-align: right; }
+  .sector-list { overflow-y: auto; scrollbar-width: thin; }
+  .sector-list::-webkit-scrollbar { width: 3px; }
+  .sector-list::-webkit-scrollbar-thumb { background: var(--border-default); border-radius: 3px; }
+  .sector-row { display: flex; align-items: center; padding: 5px 6px; font-size: 12px; border-bottom: 1px solid var(--border-subtle); }
+  .sector-row:last-child { border-bottom: none; }
+  .sr-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-primary); }
+  .sr-pct { width: 60px; text-align: right; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .sr-flow { width: 70px; text-align: right; font-variant-numeric: tabular-nums; }
+  .sr-pct.up { color: var(--color-up); }
+  .sr-pct.down { color: var(--color-down); }
+  .sr-pct.flat { color: var(--text-muted); }
+  .sr-flow.up { color: var(--color-up); }
+  .sr-flow.down { color: var(--color-down); }
+  .sr-flow.flat { color: var(--text-muted); }
   .index-card {
     border-radius: 10px; padding: 8px 4px;
     text-align: center; cursor: pointer;
@@ -670,9 +696,24 @@
   <button class="theme-toggle" id="themeToggle" onclick="toggleTheme()">🌙</button>
 </div>
 
-<!-- 指数栏 -->
+<!-- 指数/板块切换 -->
 <div class="index-bar" id="indexBar">
-  <div id="indexCards"></div>
+  <div class="index-bar-tabs">
+    <button class="index-bar-tab active" onclick="switchIndexBarTab('index',this)">指数</button>
+    <button class="index-bar-tab" onclick="switchIndexBarTab('concept',this)">概念板块</button>
+    <button class="index-bar-tab" onclick="switchIndexBarTab('industry',this)">行业板块</button>
+  </div>
+  <div class="index-bar-content">
+    <div id="indexCards"></div>
+    <div id="sectorPanel" style="display:none;">
+      <div class="sector-header" id="sectorHeader">
+        <span class="sh-name" onclick="sortSector('name')">板块名称<span class="sort-arrow"></span></span>
+        <span class="sh-pct" onclick="sortSector('pct')">涨幅<span class="sort-arrow">↓</span></span>
+        <span class="sh-flow" onclick="sortSector('flow')">资金流入<span class="sort-arrow"></span></span>
+      </div>
+      <div id="sectorList" class="sector-list"></div>
+    </div>
+  </div>
 </div>
 
 <!-- 汇总栏 -->
@@ -901,7 +942,7 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
 <script>
-const APP_VERSION = 'V4';
+const APP_VERSION = 'V4.1';
 const PERIOD_NAMES = { trend: '分时', trend5: '五日', day: '日K', week: '周K', month: '月K' };
 const XHR_TIMEOUT = 8000;
 const JSONP_TIMEOUT = 10000;
@@ -4574,6 +4615,189 @@ function resetAddForm() {
   const pi = document.getElementById('addProfit');
   if (di) di.value = todayStr();
   if (pi) { pi.placeholder = '持有收益'; }
+}
+
+// ============ 指数/板块切换 ============
+var _currentSectorType = 'industry';
+var _sectorCache = { industry: null, concept: null };
+var _sectorCacheTime = { industry: 0, concept: 0 };
+var _sectorSort = { field: 'pct', asc: false };
+
+function switchIndexBarTab(tab, btn) {
+  var tabs = btn.parentElement.querySelectorAll('.index-bar-tab');
+  tabs.forEach(function(t) { t.classList.remove('active'); });
+  btn.classList.add('active');
+  var cards = document.getElementById('indexCards');
+  var panel = document.getElementById('sectorPanel');
+  if (tab === 'index') {
+    cards.style.display = '';
+    panel.style.display = 'none';
+    cards.parentElement.style.height = '';
+  } else {
+    var content = cards.parentElement;
+    var h = content.getBoundingClientRect().height;
+    content.style.height = h + 'px';
+    cards.style.display = 'none';
+    panel.style.display = '';
+    panel.style.height = '100%';
+    var header = document.getElementById('sectorHeader');
+    var headerH = header ? header.getBoundingClientRect().height : 0;
+    document.getElementById('sectorList').style.height = (h - headerH) + 'px';
+    _currentSectorType = tab;
+    loadSectorData(tab);
+  }
+}
+
+function sortSector(field) {
+  if (_sectorSort.field === field) {
+    _sectorSort.asc = !_sectorSort.asc;
+  } else {
+    _sectorSort.field = field;
+    _sectorSort.asc = field === 'name';
+  }
+  var arrows = document.querySelectorAll('#sectorHeader .sort-arrow');
+  arrows.forEach(function(a) { a.textContent = ''; });
+  var idx = { name: 0, pct: 1, flow: 2 }[field];
+  if (arrows[idx]) arrows[idx].textContent = _sectorSort.asc ? '↑' : '↓';
+  var cached = _sectorCache[_currentSectorType];
+  if (cached) renderSectorList(cached);
+}
+
+var _sectorReqId = 0;
+
+function loadSectorData(type) {
+  var now = Date.now();
+  if (_sectorCache[type] && now - _sectorCacheTime[type] < 10000) {
+    renderSectorList(_sectorCache[type]);
+    return;
+  }
+  var el = document.getElementById('sectorList');
+  if (el) el.innerHTML = '<div style="text-align:center;padding:20px;color:var(--text-muted);">加载中...</div>';
+  var reqId = ++_sectorReqId;
+  var fs = type === 'industry' ? 'm:90+t:2' : 'm:90+t:3';
+  var pageSize = 100;
+  var allItems = [];
+  var totalPages = 1;
+  var loadedPages = 0;
+  var failed = false;
+
+  function fetchPage(page, onFirstPage) {
+    var cbName = 'cbSector' + reqId + '_p' + page;
+    var done = false;
+    window[cbName] = function(d) {
+      if (done) return;
+      done = true;
+      delete window[cbName];
+      if (reqId !== _sectorReqId || failed) return;
+      if (!d || !d.data || !d.data.diff) {
+        failed = true;
+        if (el) el.innerHTML = '<div style="text-align:center;padding:20px;color:var(--text-muted);">暂无数据</div>';
+        return;
+      }
+      var raw = d.data.diff;
+      var arr = Array.isArray(raw) ? raw : Object.values(raw);
+      allItems = allItems.concat(arr.map(function(item) {
+        return { name: item.f14, pct: item.f3 / 100, flow: item.f62, vol: item.f6, code: item.f12 };
+      }));
+      totalPages = Math.ceil((d.data.total || arr.length) / pageSize);
+      loadedPages++;
+      if (loadedPages >= totalPages) {
+        var baseMap = {};
+        allItems.forEach(function(item) {
+          var base = item.name.replace(/[ⅡⅢ]$/, '');
+          if (!baseMap[base]) baseMap[base] = [];
+          baseMap[base].push(item);
+        });
+        var filtered = [];
+        Object.keys(baseMap).forEach(function(base) {
+          var group = baseMap[base];
+          if (group.length > 1) {
+            group.forEach(function(item) { if (!/Ⅲ$/.test(item.name)) filtered.push(item); });
+          } else {
+            filtered.push(group[0]);
+          }
+        });
+        _sectorCache[type] = filtered;
+        _sectorCacheTime[type] = Date.now();
+        renderSectorList(filtered);
+      } else if (onFirstPage) {
+        onFirstPage();
+      }
+    };
+    var url = 'https://push2delay.eastmoney.com/api/qt/clist/get?pn=' + page + '&pz=' + pageSize + '&fs=' + fs + '&fields=f3,f6,f12,f14,f62&cb=' + cbName;
+    var s = document.createElement('script');
+    s.src = url;
+    s.onerror = function() {
+      if (done) return;
+      done = true;
+      delete window[cbName];
+      s.remove();
+      if (!failed && el) {
+        failed = true;
+        el.innerHTML = '<div style="text-align:center;padding:20px;color:var(--color-down);">加载失败，请检查网络</div>';
+      }
+    };
+    s.onload = function() { s.remove(); };
+    setTimeout(function() {
+      if (done) return;
+      done = true;
+      delete window[cbName];
+      if (document.body.contains(s)) s.remove();
+      if (!failed && el) {
+        failed = true;
+        el.innerHTML = '<div style="text-align:center;padding:20px;color:var(--color-down);">请求超时，请稍后重试</div>';
+      }
+    }, 10000);
+    document.body.appendChild(s);
+  }
+
+  fetchPage(1, function() {
+    if (reqId !== _sectorReqId || failed) return;
+    for (var p = 2; p <= totalPages; p++) {
+      fetchPage(p);
+    }
+  });
+}
+
+function _formatMoney(v) {
+  if (v === null || v === undefined || v === '-') return '--';
+  var n = parseFloat(v);
+  if (isNaN(n)) return '--';
+  var abs = Math.abs(n);
+  if (abs >= 1e8) return (n / 1e8).toFixed(2) + '亿';
+  if (abs >= 1e4) return (n / 1e4).toFixed(1) + '万';
+  return n.toFixed(0);
+}
+
+function renderSectorList(list) {
+  var el = document.getElementById('sectorList');
+  if (!el) return;
+  var sorted = list.slice().sort(function(a, b) {
+    var field = _sectorSort.field;
+    var asc = _sectorSort.asc;
+    if (field === 'name') {
+      var cmp = (a.name || '').localeCompare(b.name || '');
+      return asc ? cmp : -cmp;
+    }
+    var va = parseFloat(a[field]) || 0;
+    var vb = parseFloat(b[field]) || 0;
+    return asc ? va - vb : vb - va;
+  });
+  var html = '';
+  sorted.forEach(function(item) {
+    var pct = parseFloat(item.pct);
+    var pctCls = pct > 0 ? 'up' : pct < 0 ? 'down' : 'flat';
+    var sign = pct > 0 ? '+' : '';
+    var flow = parseFloat(item.flow);
+    var flowCls = flow > 0 ? 'up' : flow < 0 ? 'down' : 'flat';
+    var flowSign = flow > 0 ? '+' : '';
+    html += '<div class="sector-row">'
+      + '<span class="sr-name">' + item.name + '</span>'
+      + '<span class="sr-pct ' + pctCls + '">' + sign + pct.toFixed(2) + '%</span>'
+      + '<span class="sr-flow ' + flowCls + '">' + flowSign + _formatMoney(flow) + '</span>'
+      + '</div>';
+  });
+  el.innerHTML = html;
 }
 
 // ============ 关联板块 ============
