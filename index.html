@@ -2454,8 +2454,8 @@ function createTrendChart(canvas, data, period, costNav) {
           borderColor: lineColor,
           backgroundColor: (ctx) => {
             const g = ctx.chart.ctx.createLinearGradient(0, 0, 0, ctx.chart.chartArea?.bottom || 200);
-            g.addColorStop(0, isDark ? 'rgba(255,255,255,0.22)' : 'rgba(71,85,105,0.22)');
-            g.addColorStop(1, isDark ? 'rgba(255,255,255,0.03)' : 'rgba(71,85,105,0.03)');
+            g.addColorStop(0, isDark ? 'rgba(148,163,184,0.35)' : 'rgba(71,85,105,0.2)');
+            g.addColorStop(1, isDark ? 'rgba(148,163,184,0.01)' : 'rgba(71,85,105,0.01)');
             return g;
           },
           fill: 'start',
