@@ -2396,7 +2396,7 @@ const _trendPlugin = {
 };
 
 // 创建 / 重建趋势图
-function createTrendChart(canvas, data, period, costNav, noAnim) {
+function createTrendChart(canvas, data, period, costNav) {
   if (!canvas || !data || !data.length) return null;
   period = period || parseInt(canvas.dataset.period) || 1;
 
@@ -2468,7 +2468,7 @@ function createTrendChart(canvas, data, period, costNav, noAnim) {
       ],
     },
     options: {
-      responsive: noAnim ? false : true,
+      responsive: true,
       maintainAspectRatio: false,
       animation: { duration: 800, easing: 'easeOutQuart' },
       interaction: { mode: 'index', intersect: false },
@@ -2510,22 +2510,17 @@ function createTrendChart(canvas, data, period, costNav, noAnim) {
   const old = Chart.getChart(canvas);
   if (old) old.destroy();
 
-  // 首次渲染：先固定 canvas 尺寸，防止 Chart.js 读到错误尺寸导致动画闪烁
-  if (noAnim) {
-    const rect = canvas.parentElement.getBoundingClientRect();
-    canvas.width = rect.width * (window.devicePixelRatio || 2);
-    canvas.height = rect.height * (window.devicePixelRatio || 2);
-    canvas.style.width = rect.width + 'px';
-    canvas.style.height = rect.height + 'px';
+  // 预设 canvas 尺寸，防止 Chart.js 读到错误尺寸导致动画闪烁
+  const _rect = canvas.parentElement.getBoundingClientRect();
+  if (_rect.width > 0 && _rect.height > 0) {
+    const _dpr = window.devicePixelRatio || 2;
+    canvas.width = _rect.width * _dpr;
+    canvas.height = _rect.height * _dpr;
+    canvas.style.width = _rect.width + 'px';
+    canvas.style.height = _rect.height + 'px';
   }
 
   const chart = new Chart(canvas.getContext('2d'), config);
-  if (noAnim) {
-    setTimeout(() => {
-      chart.options.responsive = true;
-      chart.resize();
-    }, 850);
-  }
   chart._rawData = recent;
   chart._baseVal = baseVal;
   chart._period = period;
@@ -2728,7 +2723,7 @@ function renderTrendCharts() {
   const fund = funds.find(f => f.code === code);
   if (fund?.history) {
     const costNav = _costNav(fund);
-    canvas._chart = createTrendChart(canvas, fund.history, period, costNav, true);
+    canvas._chart = createTrendChart(canvas, fund.history, period, costNav);
     canvas._history = fund.history;
     showChartLoading(code, false);
     return;
@@ -2740,7 +2735,7 @@ function renderTrendCharts() {
     if (!history) return;
     const cur = funds.find(f => f.code === code);
     const costNav = _costNav(cur);
-    canvas._chart = createTrendChart(canvas, history, period, costNav, true);
+    canvas._chart = createTrendChart(canvas, history, period, costNav);
     canvas._history = history;
   });
 }
@@ -3379,13 +3374,14 @@ function drawIndexChart(canvas, points, isTrend, color, preClose, period, isFirs
   if (old) old.destroy();
   _indexChartInstance = null;
 
-  // 首次渲染：固定 canvas 尺寸防止动画闪烁
-  if (isFirst) {
-    var rect = canvas.parentElement.getBoundingClientRect();
-    canvas.width = rect.width * (window.devicePixelRatio || 2);
-    canvas.height = rect.height * (window.devicePixelRatio || 2);
-    canvas.style.width = rect.width + 'px';
-    canvas.style.height = rect.height + 'px';
+  // 预设 canvas 尺寸，防止动画闪烁
+  var _rect = canvas.parentElement.getBoundingClientRect();
+  if (_rect.width > 0 && _rect.height > 0) {
+    var _dpr = window.devicePixelRatio || 2;
+    canvas.width = _rect.width * _dpr;
+    canvas.height = _rect.height * _dpr;
+    canvas.style.width = _rect.width + 'px';
+    canvas.style.height = _rect.height + 'px';
   }
 
   // ── 十字线插件 ──
@@ -3586,7 +3582,7 @@ function drawIndexChart(canvas, points, isTrend, color, preClose, period, isFirs
       type: 'line',
       data: { labels: labels, datasets: datasets },
       options: {
-        responsive: isFirst ? false : true,
+        responsive: true,
         maintainAspectRatio: false,
         animation: { duration: 800, easing: 'easeOutQuart' },
         interaction: { mode: 'index', intersect: false },
@@ -3674,7 +3670,7 @@ function drawIndexChart(canvas, points, isTrend, color, preClose, period, isFirs
         }]
       },
       options: {
-        responsive: isFirst ? false : true,
+        responsive: true,
         maintainAspectRatio: false,
         devicePixelRatio: window.devicePixelRatio || 2,
         animation: { duration: 800, easing: 'easeOutQuart' },
@@ -3709,12 +3705,6 @@ function drawIndexChart(canvas, points, isTrend, color, preClose, period, isFirs
   }
 
   canvas._indexChart = _indexChartInstance;
-  if (isFirst) {
-    setTimeout(() => {
-      _indexChartInstance.options.responsive = true;
-      _indexChartInstance.resize();
-    }, 850);
-  }
 
   // 初始化信息条
   _updateICInfo(points, points.length - 1, isTrend, period, preClose, color);
@@ -4164,7 +4154,7 @@ function openFundDetailModal(code){
 
   document.getElementById('fundDetailBody').innerHTML = html;
   document.getElementById('fundDetailModal').classList.add('active');
-  requestAnimationFrame(()=>{ requestAnimationFrame(()=>{ renderTrendCharts(); renderIndexReferences(); }); });
+  setTimeout(()=>{ renderTrendCharts(); renderIndexReferences(); }, 100);
 }
 
 function closeFundDetailModal(){
