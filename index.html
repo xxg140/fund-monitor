@@ -2396,7 +2396,7 @@ const _trendPlugin = {
 };
 
 // 创建 / 重建趋势图
-function createTrendChart(canvas, data, period, costNav) {
+function createTrendChart(canvas, data, period, costNav, noAnim) {
   if (!canvas || !data || !data.length) return null;
   period = period || parseInt(canvas.dataset.period) || 1;
 
@@ -2469,7 +2469,7 @@ function createTrendChart(canvas, data, period, costNav) {
     options: {
       responsive: true,
       maintainAspectRatio: false,
-      animation: { duration: 800, easing: 'easeOutQuart' },
+      animation: noAnim ? false : { duration: 800, easing: 'easeOutQuart' },
       interaction: { mode: 'index', intersect: false },
       layout: { padding: { left: 10, right: 10 } },
       plugins: { legend: { display: false }, tooltip: { enabled: false } },
@@ -2712,7 +2712,7 @@ function renderTrendCharts() {
   const fund = funds.find(f => f.code === code);
   if (fund?.history) {
     const costNav = _costNav(fund);
-    canvas._chart = createTrendChart(canvas, fund.history, period, costNav);
+    canvas._chart = createTrendChart(canvas, fund.history, period, costNav, true);
     canvas._history = fund.history;
     showChartLoading(code, false);
     return;
@@ -2724,7 +2724,7 @@ function renderTrendCharts() {
     if (!history) return;
     const cur = funds.find(f => f.code === code);
     const costNav = _costNav(cur);
-    canvas._chart = createTrendChart(canvas, history, period, costNav);
+    canvas._chart = createTrendChart(canvas, history, period, costNav, true);
     canvas._history = history;
   });
 }
