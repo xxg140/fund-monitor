@@ -2463,6 +2463,7 @@ function createTrendChart(canvas, data, period, costNav, noAnim) {
           pointHoverRadius: 0,
           borderWidth: 1.5,
           tension: 0.2,
+          clip: false,
         },
       ],
     },
@@ -2511,8 +2512,10 @@ function createTrendChart(canvas, data, period, costNav, noAnim) {
 
   const chart = new Chart(canvas.getContext('2d'), config);
   if (noAnim) {
-    chart.options.responsive = true;
-    setTimeout(() => chart.resize(), 0);
+    setTimeout(() => {
+      chart.options.responsive = true;
+      chart.resize();
+    }, 850);
   }
   chart._rawData = recent;
   chart._baseVal = baseVal;
@@ -3689,8 +3692,10 @@ function drawIndexChart(canvas, points, isTrend, color, preClose, period, isFirs
 
   canvas._indexChart = _indexChartInstance;
   if (isFirst) {
-    _indexChartInstance.options.responsive = true;
-    setTimeout(() => _indexChartInstance.resize(), 0);
+    setTimeout(() => {
+      _indexChartInstance.options.responsive = true;
+      _indexChartInstance.resize();
+    }, 850);
   }
 
   // 初始化信息条
