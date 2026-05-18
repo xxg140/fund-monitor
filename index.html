@@ -3096,8 +3096,6 @@ function renderIndexChart(info, rawData, period, apiPreClose, trend5Base) {
     }
   }
   const amplitude = prevClose > 0 ? ((todayHigh - todayLow) / prevClose * 100).toFixed(2) : '0.00';
-  // 周期按钮文字
-  const periodNames = PERIOD_NAMES;
   // 构建界面
   const priceColor = cls === 'up' ? 'var(--color-up)' : (cls === 'down' ? 'var(--color-down)' : 'var(--text-primary)');
   const chgColor = cls === 'up' ? 'var(--color-up)' : (cls === 'down' ? 'var(--color-down)' : 'var(--text-muted)');
@@ -3490,7 +3488,6 @@ function drawIndexChart(canvas, points, isTrend, color, preClose, period) {
     },
     plugins: isTrend ? [crosshairPlugin] : [wickPlugin, crosshairPlugin]
   });
-  canvas._indexChart = _indexChartInstance;
   // 初始化信息条
   var lastP = points[points.length - 1];
   var lastV = isTrend ? lastP.price : lastP.close;
@@ -3570,16 +3567,6 @@ function _updateICInfo(points, idx, isTrend, period, preClose, color) {
     var pct = calcPct(p.close, prevClose);
     $ic(pEl, pct.txt || '涨幅 --', pct.clr || 'var(--text-muted)');
   }
-}
-function _clearICInfo() {
-  ['icDate','icClose','icPct','icOpen'].forEach(function(id) {
-    var el = document.getElementById(id);
-    if (el) { el.textContent = ''; el.style.color = ''; }
-  });
-  ['icDate','icClose','icPct','icOpen'].forEach(function(id) {
-    var el = document.getElementById(id);
-    if (el && el.parentElement) el.parentElement.style.display = '';
-  });
 }
 // 覆盖body.dark下的canvas背景
 document.addEventListener('DOMContentLoaded', () => {
